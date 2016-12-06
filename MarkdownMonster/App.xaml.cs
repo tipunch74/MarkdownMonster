@@ -115,9 +115,9 @@ namespace MarkdownMonster
             if (assembly != null)
                 return assembly;
 
-            // *** Try to load by filename - split out the filename of the full assembly name
-            // *** and append the base path of the original assembly (ie. look in the same dir)
-            // *** NOTE: this doesn't account for special search paths but then that never
+            // Try to load by filename - split out the filename of the full assembly name
+            // and append the base path of the original assembly (ie. look in the same dir)
+            // NOTE: this doesn't account for special search paths but then that never
             //           worked before either.
             string[] parts = args.Name.Split(',');
             string file = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), parts[0] + ".dll");
@@ -130,7 +130,6 @@ namespace MarkdownMonster
             {
                 return null;
             }
-
         }
 
         private void App_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)

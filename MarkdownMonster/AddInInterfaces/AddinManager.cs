@@ -55,6 +55,17 @@ namespace MarkdownMonster.AddIns
             if (!Directory.Exists(addinPath))
                 return;
 
+            // Clear out old addin files in root
+            // TODO: Remove after a few months
+            try
+            {
+                var files = Directory.GetFiles(addinPath);
+                foreach (var file in files)                
+                    File.Delete(file);
+            } catch { }
+            
+
+            // Check for Addins to install
             try
             {
                 if (Directory.Exists(addinPath + "\\Install"))
@@ -65,61 +76,19 @@ namespace MarkdownMonster.AddIns
                 mmApp.Log($"Addin Update failed: {ex.Message}");
             }
 
-
-            // we need to make sure already loaded dependencies are not loaded again
-            // when probing for add-ins
-            var assemblyFiles = Directory.GetFiles(Environment.CurrentDirectory, "*.dll");
-
-
-            var dirs = Directory.GetDirectories(addinPath);
-
+            var dirs = Directory.GetDirectories(addinPath);            
             foreach (var dir in dirs)
             {
                 var files = Directory.GetFiles(dir, "*.dll");
-
                 foreach (var file in files)
                 {
-                    // don't allow assemblies the main app loads to load
                     string fname = Path.GetFileName(file).ToLower();
-                    if (!fname.EndsWith("addin.dll"))
-                        continue;
-
-                    bool isLoaded = assemblyFiles.Any(f => fname == Path.GetFileName(f).ToLower());
-
-                    if (!isLoaded)
-                    {
+                    if (fname.EndsWith("addin.dll"))
                         LoadAddinClasses(file);
-                    }
                 }
             }
         }
 
-        private void InstallAddinFiles(string path)
-        {
-            var target = Path.GetFullPath(Path.Combine(path, ".."));
-
-            var files = Directory.GetFiles(path);
-            var dirs = Directory.GetDirectories(path);
-            foreach (var file in files)
-            {
-                var filename = Path.GetFileName(file);
-                File.Copy(file, Path.Combine(target,filename),true);
-                File.Delete(file);
-            }
-            foreach (var dir in dirs)
-            {
-                AppDomain.CurrentDomain.AppendPrivatePath(dir);
-
-                var files2 = Directory.GetFiles(Path.Combine(path, dir));
-                foreach (var file in files2)
-                {
-                    File.Copy(file, Path.Combine(target,dir,Path.GetFileName(file)), true);
-                    File.Delete(file);
-                }
-            }
-
-            Directory.Delete(path, true);
-        }
         
 
         /// <summary>
@@ -172,6 +141,38 @@ namespace MarkdownMonster.AddIns
                     this.AddIns.Add(ai);
                 }
             }
+        }
+
+
+        private void InstallAddinFiles(string path)
+        {
+            throw new NotImplementedException();
+
+            //var addinBasePath = Path.GetFullPath(Path.Combine(path, ".."));
+
+            
+            //var dirs = Directory.GetDirectories(path);
+            //foreach (var addinInstallFolder in dirs)
+            //{
+            //    var files = Directory.GetFiles(addinInstallFolder);
+            //    foreach (var file in files)
+            //    {
+            //        var filename = Path.GetFileName(file);
+            //        File.Copy(file, Path.Combine(addinBase, filename), true);
+            //        File.Delete(file);
+            //    }
+            //    foreach (var dir in dirs)
+            //    {
+            //        var files2 = Directory.GetFiles(Path.Combine(path, dir));
+            //        foreach (var file in files2)
+            //        {
+            //            File.Copy(file, Path.Combine(addinBasePath, dir, Path.GetFileName(file)), true);
+            //            File.Delete(file);
+            //        }
+            //    }
+
+            //    Directory.Delete(path, true);
+            //}
         }
 
 
