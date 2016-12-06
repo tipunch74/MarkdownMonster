@@ -24,6 +24,7 @@
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -88,16 +89,18 @@ namespace MarkdownMonster
                     Environment.Exit(0);
                 }
             }
-#if !DEBUG
 
+
+
+
+#if !DEBUG
             //AppDomain currentDomain = AppDomain.CurrentDomain;
             //currentDomain.UnhandledException += new UnhandledExceptionEventHandler(GlobalErrorHandler);
-
-
             DispatcherUnhandledException += App_DispatcherUnhandledException;
 #endif
             mmApp.Started = DateTime.UtcNow;
         }
+
 
         private void App_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
         {

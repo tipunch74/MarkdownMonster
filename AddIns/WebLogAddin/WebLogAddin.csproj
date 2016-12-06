@@ -164,9 +164,9 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>copy   "$(TargetPath)"   "$(SolutionDir)MarkdownMonster\bin\$(ConfigurationName)\Addins\$(TargetFileName)"
-copy   "$(TargetDir)HtmlAgilityPack.dll"   "$(SolutionDir)MarkdownMonster\bin\$(ConfigurationName)\Addins\HtmlAgilityPack.dll"
-copy   "$(TargetDir)CookComputing.XmlRpcV2.dll"   "$(SolutionDir)MarkdownMonster\bin\$(ConfigurationName)\Addins\CookComputing.XmlRpcV2.dll"
+    <PostBuildEvent>copy   "$(TargetPath)"   "$(SolutionDir)MarkdownMonster\bin\$(ConfigurationName)\Addins\WeblogAddin\$(TargetFileName)"
+copy   "$(TargetDir)HtmlAgilityPack.dll"   "$(SolutionDir)MarkdownMonster\bin\$(ConfigurationName)\Addins\WeblogAddin\HtmlAgilityPack.dll"
+copy   "$(TargetDir)CookComputing.XmlRpcV2.dll"   "$(SolutionDir)MarkdownMonster\bin\$(ConfigurationName)\Addins\WeblogAddin\CookComputing.XmlRpcV2.dll"
 
 </PostBuildEvent>
   </PropertyGroup>

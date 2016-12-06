@@ -70,17 +70,26 @@ namespace MarkdownMonster.AddIns
             // when probing for add-ins
             var assemblyFiles = Directory.GetFiles(Environment.CurrentDirectory, "*.dll");
 
-            var files = Directory.GetFiles(addinPath, "*.dll");
 
-            foreach (var file in files)
+            var dirs = Directory.GetDirectories(addinPath);
+
+            foreach (var dir in dirs)
             {
-                // don't allow assemblies the main app loads to load
-                string fname = Path.GetFileName(file).ToLower();
-                bool isLoaded = assemblyFiles.Any(f => fname == Path.GetFileName(f).ToLower());
+                var files = Directory.GetFiles(dir, "*.dll");
 
-                if (!isLoaded)
+                foreach (var file in files)
                 {
-                    LoadAddinClasses(file);
+                    // don't allow assemblies the main app loads to load
+                    string fname = Path.GetFileName(file).ToLower();
+                    if (!fname.EndsWith("addin.dll"))
+                        continue;
+
+                    bool isLoaded = assemblyFiles.Any(f => fname == Path.GetFileName(f).ToLower());
+
+                    if (!isLoaded)
+                    {
+                        LoadAddinClasses(file);
+                    }
                 }
             }
         }
@@ -99,6 +108,8 @@ namespace MarkdownMonster.AddIns
             }
             foreach (var dir in dirs)
             {
+                AppDomain.CurrentDomain.AppendPrivatePath(dir);
+
                 var files2 = Directory.GetFiles(Path.Combine(path, dir));
                 foreach (var file in files2)
                 {
@@ -122,9 +133,29 @@ namespace MarkdownMonster.AddIns
 
             try
             {
-                asm = Assembly.LoadFile(assemblyFile);
-                types = asm.GetTypes();
+                asm = Assembly.LoadFrom(assemblyFile);
+                string path = Path.GetDirectoryName(assemblyFile);
 
+                var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+
+                // load dependencies
+                foreach (var refAssembly in asm.GetReferencedAssemblies())
+                {
+                    // already loaded?
+                    Assembly assembly = assemblies.FirstOrDefault(a => a.FullName == refAssembly.FullName);
+                    if (assembly != null)
+                        continue;
+                    
+                    // see if there's a local file in same folder as addin
+                    string file = Path.Combine(path, refAssembly.FullName.Split(',')[0] + ".dll");
+                    if (File.Exists(file))
+                        Assembly.LoadFrom(file);
+                    else
+                        // load from Gac
+                        Assembly.Load(refAssembly.FullName);
+                }
+
+                types = asm.GetTypes();
             }
             catch
             {
