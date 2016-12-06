@@ -114,7 +114,7 @@ namespace MarkdownMonster.AddIns
                     Assembly assembly = assemblies.FirstOrDefault(a => a.FullName == refAssembly.FullName);
                     if (assembly != null)
                         continue;
-                    
+
                     // see if there's a local file in same folder as addin
                     string file = Path.Combine(path, refAssembly.FullName.Split(',')[0] + ".dll");
                     if (File.Exists(file))
