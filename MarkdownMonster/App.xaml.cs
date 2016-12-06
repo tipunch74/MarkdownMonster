@@ -91,16 +91,47 @@ namespace MarkdownMonster
             }
 
 
+            AppDomain currentDomain = AppDomain.CurrentDomain;
 
-
+            currentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
 #if !DEBUG
-            //AppDomain currentDomain = AppDomain.CurrentDomain;
+
+            
             //currentDomain.UnhandledException += new UnhandledExceptionEventHandler(GlobalErrorHandler);
+
+
             DispatcherUnhandledException += App_DispatcherUnhandledException;
 #endif
             mmApp.Started = DateTime.UtcNow;
         }
 
+        private Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
+        {
+            if (args.Name.Contains(".resources"))
+                return null;
+
+            // check for assemblies already loaded
+            Assembly assembly = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.FullName == args.Name);
+            if (assembly != null)
+                return assembly;
+
+            // *** Try to load by filename - split out the filename of the full assembly name
+            // *** and append the base path of the original assembly (ie. look in the same dir)
+            // *** NOTE: this doesn't account for special search paths but then that never
+            //           worked before either.
+            string[] parts = args.Name.Split(',');
+            string file = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), parts[0] + ".dll");
+
+            try
+            {
+                return System.Reflection.Assembly.LoadFrom(file);
+            }
+            catch (Exception ex)
+            {
+                return null;
+            }
+
+        }
 
         private void App_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
         {
