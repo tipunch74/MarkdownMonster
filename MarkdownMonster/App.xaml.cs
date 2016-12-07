@@ -92,6 +92,7 @@ namespace MarkdownMonster
 
 
             AppDomain currentDomain = AppDomain.CurrentDomain;
+
             currentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
 #if !DEBUG
 
@@ -105,8 +106,8 @@ namespace MarkdownMonster
         }
 
         private Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
-        {            
-            if (args.Name.Contains(".resources,")) // ignore resource requests
+        {
+            if (args.Name.Contains(".resources"))
                 return null;
 
             // check for assemblies already loaded
@@ -118,23 +119,12 @@ namespace MarkdownMonster
             // and append the base path of the original assembly (ie. look in the same dir)
             // NOTE: this doesn't account for special search paths but then that never
             //           worked before either.
-            string filename = args.Name.Split(',')[0] + ".dll";
-            
-            // try to load assembly out of path of calling assembly
-            if (args.RequestingAssembly != null)
-            {
-                var path = Path.GetDirectoryName(args.RequestingAssembly.Location);
-                var asm = Assembly.LoadFrom(Path.Combine(path, filename));
-                if (asm != null)
-                    return asm;
-            }
+            string[] parts = args.Name.Split(',');
+            string file = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), parts[0] + ".dll");
 
-
-            // Last ditch: Try to load out of application base path
-            string file = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), filename + ".dll");
             try
             {
-                return Assembly.LoadFrom(file);
+                return System.Reflection.Assembly.LoadFrom(file);
             }
             catch (Exception ex)
             {
