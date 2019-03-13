@@ -17,15 +17,24 @@ namespace MarkdownMonster.Windows
             
             mmApp.SetThemeWindowOverride(this);
 
-            VersionLabel.Content = mmApp.GetVersion();
+            VersionLabel.Content = "Version " +  mmApp.GetVersionForDisplay();
+            VersionDateLabel.Content = mmApp.GetVersionDate();
             OsLabel.Content = (Environment.Is64BitProcess ? "64 bit" : "32 bit") + " • " +
-                             ".NET " + ComputerInfo.GetDotnetVersion();
-                                
+                             ".NET " + WindowsUtils.GetDotnetVersion();
+            if(App.IsPortableMode)
+                PortableMode.Content = "Portable mode";
 
             if (UnlockKey.IsRegistered())
             {
                 PanelFreeNotice.Visibility = System.Windows.Visibility.Hidden;
+                LabelRegistered.Visibility = System.Windows.Visibility.Visible;
             }
+            
+
+            if (mmApp.Configuration.ApplicationUpdates.AccessCount > 20)
+                LabelUsingFreeVersion.Text =
+                    $"You've used the free version {mmApp.Configuration.ApplicationUpdates.AccessCount:n0} times.";
+
         }
 
         private void WestWindIcon_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -35,7 +44,7 @@ namespace MarkdownMonster.Windows
 
         private void Register_Click(object sender, System.Windows.RoutedEventArgs e)
         {
-            ShellUtils.GoUrl("https://store.west-wind.com/product/markdown_monster");
+            ShellUtils.GoUrl(mmApp.Urls.RegistrationUrl);
         }
     }
 }

@@ -83,7 +83,7 @@ namespace WebLogAddin.MetaWebLogApi
             {
                 return new XmlRpcCustomField
                 {
-                    id = input.ID,
+                    id = input.Id,
                     key = input.Key,
                     value = input.Value
                 };
@@ -191,7 +191,7 @@ namespace WebLogAddin.MetaWebLogApi
             {
                 return new XmlRpcUserBlog
                            {
-                               blogId = input.BlogID,
+                               blogid = input.BlogId,
                                blogName = input.BlogName,
                                isAdmin = input.IsAdmin,
                                url = input.URL,
@@ -216,15 +216,17 @@ namespace WebLogAddin.MetaWebLogApi
                     mt_text_more = input.mt_text_more,                              
                     post_content = input.post_content,
                     mt_keywords = input.Tags == null ? input.mt_keywords : String.Join(",", input.Tags),
-                    postid = input.PostID,
+                    postid = input.PostId,
                     title = input.Title,
                     permaLink = input.Permalink,
+                    link  = input.Url,
                     post_type = input.PostType,
+					post_status = input.PostStatus,
                     mt_excerpt = input.mt_excerpt,   
                     wp_post_thumbnail = input.wp_post_thumbnail,                       
                     custom_fields = input.CustomFields == null ? null : input.CustomFields.Select(cf => new XmlRpcCustomField()
                     {
-                        id = cf.ID,
+                        id = cf.Id,
                         key = cf.Key,
                         value = cf.Value
                     }).ToArray(),
@@ -280,7 +282,7 @@ namespace WebLogAddin.MetaWebLogApi
             {
                 return new Post
                 {
-                    PostID = input.postid,
+                    PostId = input.postid,
                     Body = input.description,
                     mt_text_more = input.mt_text_more,
                     post_content = input.post_content,                    
@@ -289,13 +291,15 @@ namespace WebLogAddin.MetaWebLogApi
                     Tags = input.mt_keywords?.Split(','),
                     Title = input.title,
                     Permalink = input.permaLink,
+                    Url = input.link,
                     mt_excerpt = input.mt_excerpt,
                     mt_keywords = input.mt_keywords,
                     wp_post_thumbnail = input.wp_post_thumbnail,
                     PostType = input.post_type,
+					PostStatus = input.post_status,
                     CustomFields = input.custom_fields == null ? null : input.custom_fields.Select(cf => new CustomField()
                     {
-                        ID = cf.id,
+                        Id = cf.id,
                         Key = cf.key,
                         Value = cf.value
                     }).ToArray(),
@@ -311,7 +315,7 @@ namespace WebLogAddin.MetaWebLogApi
             {
                 return new Post
                 {
-                    PostID = input.postid,
+                    PostId = input.postid,
                     Body = input.description,
                     Categories = input.categories,
                     DateCreated = input.dateCreated,
@@ -319,11 +323,12 @@ namespace WebLogAddin.MetaWebLogApi
                     Title = input.title,
                     Permalink = input.permaLink,
                     PostType = input.post_type,
+					PostStatus = input.post_status,
                     mt_keywords = input.mt_keywords,
                     mt_excerpt = input.mt_excerpt,                    
                     CustomFields = input.custom_fields == null ? null : input.custom_fields.Select(cf => new CustomField()
                     {
-                        ID = cf.id,
+                        Id = cf.id,
                         Key = cf.key,
                         Value = cf.value
                     }).ToArray(),
@@ -392,11 +397,12 @@ namespace WebLogAddin.MetaWebLogApi
                 var result = new UserBlog
                 {
                     BlogName = input.blogName,
+                    BlogId = input.blogid,
                     IsAdmin = input.isAdmin,
                     URL = input.url
                 };
 
-                SetPrivateFieldValue("_userBlogID", input.blogId, result);
+                SetPrivateFieldValue("_userBlogID", input.blogid, result);
 
                 return result;
             }

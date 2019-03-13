@@ -14,6 +14,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using MahApps.Metro.Controls;
+using Westwind.Utilities;
 
 namespace MarkdownMonster.Windows
 {
@@ -23,8 +24,26 @@ namespace MarkdownMonster.Windows
     public partial class PasteCode : MetroWindow
     {
 
-        public string Code { get; set; }        
-        public string CodeLanguage { get; set; }
+        public AppModel AppModel { get; set; }
+
+
+        public string Code
+        {
+            get { return _code; }
+            set
+            {
+                _code = StringUtils.NormalizeIndentation(value);
+            }
+        }
+        private string _code;
+        
+
+        public string CodeLanguage
+        {
+            get { return mmApp.Configuration.DefaultCodeSyntax; }
+            set { mmApp.Configuration.DefaultCodeSyntax = value; }
+        }
+
         public Dictionary<string,string> LanguageNames { get; set; }
 
         private MarkdownEditorSimple editor;
@@ -36,48 +55,59 @@ namespace MarkdownMonster.Windows
 
             LanguageNames = new Dictionary<string, string>()
             {
-                {"csharp", "C#"},
+                {"csharp", "CSharp"},
                 {"html", "Html"},
                 {"css", "Css"},
                 {"javascript", "JavaScript"},
                 {"typescript", "TypeScript"},
                 {"json", "Json"},
+                {"xml", "Xml" },
 
                 {"sql","SQL" },
                 {"vbnet", "Vb.Net"},
+                {"fsharp", "Fsharp"},
                 {"cpp", "C++"},
                 {"foxpro", "FoxPro"},
-                {"fsharp", "Fsharp"},
 
                 {"ruby", "Ruby"},
                 {"python", "Python"},
                 {"php", "PHP"},
                 {"java", "Java"},
                 {"swift", "Swift"},
-                {"objectivec", "Objective C"},                                
+                {"objectivec", "Objective C"},
                 {"vbscript", "VB Script"},
+                {"haskell", "Haskel" },
+                {"go", "Go" },
 
                 {"dockerfile", "Docker file"},
                 {"makefile", "Make file"},
                 {"nginx", "NgInx"},
 
                 {"markdown","Markdown" },
+                {"yaml", "Yaml" },
 
                 {"powershell", "PowerShell"},
                 {"dos", "DOS"},
+                {"bash", "Bash" },
                 {"ini", "INI files" },
                 {"dns", "DNS"},
                 {"perl", "Perl"},
                 {"diff", "Diff file"},
 
-                {"txt", "Text - plain text, no formatting" }                
-            };
-            CodeLanguage = "cs";
+                {"text", "Text - plain text, no formatting" }
+            }
+            .OrderBy(kv => kv.Key.ToLower())
+            .ToDictionary(kv=> kv.Key, kv=> kv.Value);
+
+            CodeLanguage = mmApp.Configuration.DefaultCodeSyntax;
 
             InitializeComponent();
 
+            AppModel = mmApp.Model;
           
-            mmApp.SetThemeWindowOverride(this);            
+            mmApp.SetThemeWindowOverride(this);
+            if (Owner == null)
+                Owner = mmApp.Model.Window;
 
             Loaded += PasteCode_Loaded;
             PreviewKeyDown += PasteCode_PreviewKeyDown;
@@ -89,10 +119,11 @@ namespace MarkdownMonster.Windows
 
         private void PasteCode_Loaded(object sender, RoutedEventArgs e)
         {
-            this.ComboBackground = TextCodeLanguage.Background;
+            ComboBackground = TextCodeLanguage.Background;
 
             DataContext = this;
-            WebBrowserCode.Focus();  
+            WebBrowserCode.Focus();
+            
 
             editor = new MarkdownEditorSimple(WebBrowserCode, Code, CodeLanguage);
             editor.IsDirtyAction = () =>
@@ -125,11 +156,19 @@ namespace MarkdownMonster.Windows
         {
             if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
             {
+                if (TextCodeLanguage.IsDropDownOpen)
+                    return;
+
                 Button_Click(ButtonOk, null);
                 return;
-            }       
+            }
             if (e.Key == Key.Enter && e.OriginalSource != WebBrowserCode)
-                Button_Click(ButtonOk, null);            
+            {
+                if (TextCodeLanguage.IsDropDownOpen)
+                    return;
+
+                Button_Click(ButtonOk, null);
+            }
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
@@ -137,9 +176,7 @@ namespace MarkdownMonster.Windows
             if (sender == ButtonCancel)
                 DialogResult = false;
             else
-            {
-                DialogResult = true;                
-            }
+                DialogResult = true;
 
             Close();
         }
@@ -154,5 +191,8 @@ namespace MarkdownMonster.Windows
             ((ComboBox) sender).Background = this.ComboBackground;
 
         }
+
+        
+        
     }
 }

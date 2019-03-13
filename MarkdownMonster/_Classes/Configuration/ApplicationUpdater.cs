@@ -103,8 +103,7 @@ namespace MarkdownMonster
             VersionFile = mmApp.Configuration.CommonFolder + "MarkdownMonster_Version.xml";
             DownloadStoragePath = Path.Combine(KnownFolders.GetDefaultPath(KnownFolder.Downloads), "MarkDownMonsterSetup.exe");
 
-            VersionCheckUrl = mmApp.Configuration.ApplicationUpdates.UpdateCheckUrl;
-            DownloadUrl = mmApp.Configuration.ApplicationUpdates.InstallerDownloadUrl;
+            VersionCheckUrl = mmApp.Urls.VersionCheckUrl;            
             CheckDays = mmApp.Configuration.ApplicationUpdates.UpdateFrequency;
             LastCheck = mmApp.Configuration.ApplicationUpdates.LastUpdateCheck;
         }
@@ -165,7 +164,14 @@ namespace MarkdownMonster
                 {
                     VersionInfo = ver;
 
-                    if (ver.Version.CompareTo(CurrentVersion) > 0)
+                    var curVer = new Version(CurrentVersion);                    
+                    var onlineVer = new Version(ver.Version);
+
+                    // Strip off revisions
+                    ReflectionUtils.SetField(curVer, "_Revision", 0);
+                    ReflectionUtils.SetField(onlineVer, "_Revision", 0);
+
+                    if (onlineVer.CompareTo(curVer) > 0)
                         return true;
                 }
             }

@@ -1,0 +1,212 @@
+﻿<UserControl x:Class="MarkdownMonster.Windows.FavoritesControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"              
+             xmlns:windows="clr-namespace:MarkdownMonster.Windows"
+             xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
+             xmlns:fa="http://schemas.fontawesome.io/icons/"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="500">
+    <UserControl.Resources>
+        <windows:FileNameFromPathConverter x:Key="FileNameFromPathConverter" />
+        <windows:FullFolderNameFromPathConverter x:Key="FullFolderNameFromPathConverter" />
+        <windows:FavoritesTitleConverter x:Key="FavoritesTitleConverter" />
+        <windows:FavoritesIconConverter x:Key="FavoritesIconConverter"  />
+        <HierarchicalDataTemplate x:Key="FolderTemplate"  ItemsSource="{Binding Path=Items}" >
+            <StackPanel>
+                <Button Cursor="Hand" Background="Transparent" Name="ButtonFavorite"
+                    Click="ButtonFavorite_Click">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Name="ButtonAddFavorite" Header="Add" Click="ButtonAddFavorite_Click"  />
+                            <MenuItem Name="ButtonAddFolder" Header="Add Folder" Click="ButtonAddFolder_Click"  />
+                            <Separator />
+                            <MenuItem Name="ButtonDeleteFavorite" Header="Delete" Click="ButtonDeleteFavorite_Click" />
+                            <MenuItem Name="ButtonEditFavorite" Header="Edit" Click="ButtonStartEditing_Click"  />
+                            <Separator/>
+                            <MenuItem Name="ButtonOpenFolder" Header="Open in Explorer" 
+                                      Command="{Binding AppModel.Commands.OpenInExplorerCommand}"
+                                      CommandParameter="{Binding DataContext.File}"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="Transparent" x:Name="BorderBg" Padding="5,2,20,3">
+                                <ContentPresenter />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="true">
+                                    <Setter Property="Background" Value="{DynamicResource SubmenuItemBackgroundHighlighted}"  TargetName="BorderBg"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Image Source="{Binding .,Converter={StaticResource FavoritesIconConverter}}" Width="14.5" Margin="0,3,7,0"/>
+                            <TextBlock  Text="{Binding ., Converter={StaticResource FavoritesTitleConverter }}" FontSize="13.5"  FontWeight="SemiBold" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding File}" FontStyle="Italic" FontSize="11" FontWeight="Normal" Margin="25,0,0,0" Foreground="#bbb"
+                           mah:VisibilityHelper.IsCollapsed="{Binding IsFolder}"
+                           />
+                    </StackPanel>
+                </Button>
+
+            </StackPanel>
+            <!--</Grid>-->
+        </HierarchicalDataTemplate>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+
+        <Grid Background="{StaticResource SidebarHeaderBackground}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal">
+                <fa:FontAwesome Icon="Star" Foreground="Goldenrod" Height="16" Width="16" Margin="5,2,0,0" />
+                <TextBlock Height="Auto" 
+                           Text="Favorites"  
+                           FontWeight="SemiBold" FontSize="11"  Padding="4,5,2,5" />
+            </StackPanel>
+
+            <Button  fa:Awesome.Content="PlusCircle" Background="Transparent" 
+                     Foreground="{DynamicResource BlueItem}" Padding="7,0,7,0" Grid.Column="1"  
+                     Name="ButtonAddFavorite" BorderThickness="0" FontSize="12"                     
+                     ToolTip="Add new Favorite. You can edit and drag and drop it into position after creating." 
+                     Click="ButtonAddFavorite_Click"
+                      />
+            <Button  fa:Awesome.Content="Refresh" Background="Transparent" 
+                     Foreground="{DynamicResource BlueItem}" Padding="7,0,7,0" Grid.Column="2"  
+                     Name="ButtonRefreshList" BorderThickness="0" FontSize="12"                     
+                     ToolTip="Reload Favorites from disk" 
+                     Click="ButtonRefreshList_Click"
+            />
+            <Button  fa:Awesome.Content="PencilSquareOutline" Background="Transparent" 
+                     Foreground="{DynamicResource BlueItem}" Padding="7,0,7,0" Grid.Column="3"  
+                     Name="ButtonEditList" BorderThickness="0" FontSize="12"                     
+                     ToolTip="Edit the Favorites JSON file" 
+                     Click="ButtonEditList_Click"
+            />
+            <Button  fa:Awesome.Content="ChevronCircleLeft" Background="Transparent" 
+                     Foreground="{DynamicResource BlueItem}" Padding="7,0,7,0" Grid.Column="4"  
+                     Name="ButtonClosePanel" BorderThickness="0" FontSize="12"                     
+                     ToolTip="Close Sidebar Panel" 
+                     Command="{Binding AppModel.Commands.CloseLeftSidebarPanelCommand}" />
+        </Grid>
+
+        <TextBox x:Name="TextSearch"  Margin="10,10,10,10" Grid.Row="1"             
+                 Text="{Binding SearchText,UpdateSourceTrigger=PropertyChanged}" 
+                 BorderThickness="0.3" Padding="1"
+                 mah:TextBoxHelper.SelectAllOnFocus="True"
+                 Opacity="0.8"  FontSize="13" FontWeight="Normal"    
+                 PreviewKeyUp="TextSearch_PreviewKeyUp"
+                 mah:TextBoxHelper.Watermark="Search Favorites" 
+                 mah:TextBoxHelper.ClearTextButton="True" />
+
+        <StackPanel Name="EditPanel" Grid.Row="2"
+                    mah:VisibilityHelper.IsVisible="{Binding  EditedFavorite.DisplayState.IsEditing}">
+
+            <Grid Background="{StaticResource SidebarHeaderBackground}" Margin="0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal">
+                    <fa:FontAwesome Icon="PencilSquareOutline" Foreground="{DynamicResource BlueItem}" Height="16" Width="16" Margin="5,2,0,0" />
+                    <!--<TextBlock fa:Awesome.Content="ListOl" Foreground="Khaki"  Height="16" Width="16" Margin="5,0,0,0" />-->
+                    <TextBlock Height="Auto" 
+                               Text="Edit Favorite"  
+                               FontWeight="SemiBold" FontSize="11"  Padding="4,5,2,5" />
+                </StackPanel>
+
+                <Button  fa:Awesome.Content="Check" Background="Transparent" 
+                     Foreground="LightGreen" Padding="7,0,7,0" Grid.Column="1"  
+                     Name="ButtonCancelFavorite" BorderThickness="0" FontSize="12"                     
+                     ToolTip="Save favorite." IsDefault="True"
+                     Click="ButtonEditComplete_Click"
+                      />
+
+                <Button  fa:Awesome.Content="Remove" Background="Transparent" 
+                     Foreground="Firebrick" Padding="7,0,7,0" Grid.Column="2"  
+                     Name="ButtonEditComplete" BorderThickness="0" FontSize="12"                     
+                     ToolTip="Cancel changes to this favorite."
+                     IsCancel="True"
+                     Click="ButtonCancelFavorite_Click"
+                      />
+            </Grid>
+
+            <TextBox Text="{Binding EditedFavorite.Title, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"                             
+                     mah:TextBoxHelper.Watermark="Title" Foreground="LightSteelBlue"
+                     FontSize="14"  FontWeight="SemiBold" Margin="5,5,5,3" Width="Auto"/>
+            <Grid  Margin="5,3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBox Text="{Binding EditedFavorite.File, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"  
+                         mah:TextBoxHelper.Watermark="File Name"  
+                         FontSize="12" FontWeight="Normal" 
+                />
+                <Button Grid.Column="1" Padding="6,0" Margin="3,0,0,0" Click="ButtonFileSelection_Click">...</Button>
+            </Grid>
+
+            <CheckBox IsChecked="{Binding EditedFavorite.IsFolder}" Content="Is Grouping" 
+                      FontSize="12" FontWeight="Normal" Margin="5,3" />
+
+            <!--<Button Name="ButtonEditComplete" 
+                    HorizontalAlignment="Left"
+                    Click="ButtonEditComplete_Click" Margin="5,7" 
+                    FontSize="12"
+                    Width="80">
+                <StackPanel Orientation="Horizontal">
+                    <fa:FontAwesome Icon="Check" Foreground="LightGreen" Margin="0,3,5,0"/>
+                    <TextBlock>_Save</TextBlock>
+                </StackPanel>
+            </Button>-->
+            <Separator Margin="0,7" />
+        </StackPanel>
+
+        <TreeView Grid.Row="3" x:Name="TreeFavorites"
+                  ItemTemplate="{StaticResource FolderTemplate}"                   
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                  ItemsSource="{Binding Favorites}"                   
+                  PreviewMouseMove="TreeFavorites_MouseMove" 
+                  BorderThickness="0">
+            <TreeView.ContextMenu>
+                <ContextMenu />
+            </TreeView.ContextMenu>
+
+            <TreeView.ItemContainerStyle>
+                <Style TargetType="{x:Type TreeViewItem}">
+
+                    <!--<EventSetter Event="PreviewMouseRightButtonUp" Handler="TreeViewItem_PreviewMouseRightButtonUp"/>-->
+                    <EventSetter Event="PreviewMouseLeftButtonDown" Handler="TreeFavorites_PreviewMouseLeftButtonDown"/>
+                    <!-- We have to select the item which is right-clicked on -->
+                    <Setter Property="IsSelected" Value="{Binding DisplayState.IsSelected}" />
+                    <Setter Property="IsExpanded" Value="{Binding IsExpanded,Mode=TwoWay}" />
+                    <Setter Property="mah:VisibilityHelper.IsVisible" Value="{Binding DisplayState.IsVisible}" />
+                    <EventSetter Event="Drop" Handler="TreeViewItem_Drop" />
+                    <EventSetter Event="Expanded" Handler="TreeViewItem_Expanded" />
+                    <EventSetter Event="Collapsed" Handler="TreeViewItem_Expanded"/>
+
+                </Style>
+            </TreeView.ItemContainerStyle>
+        </TreeView>
+    </Grid>
+</UserControl>

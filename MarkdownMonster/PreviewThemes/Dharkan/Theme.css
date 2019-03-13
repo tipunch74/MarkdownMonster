@@ -16,29 +16,32 @@ html, body {
 } 
 
 h1,h2,h3,h4,h5,h6, .byline,.content-title {
-  color: #535353;
-  font-weight: bold;
+  color: #444;
+  font-weight: 600;
   font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans';
+  margin-top: 1.2em;
+  margin-bottom: 0.5em;
 }
+
 h1 {
     font-size: 1.7em;
-    padding-bottom:10px;
-    margin-bottom: 15px;
-    color: steelblue;
+    padding-bottom: 10px;
     border-bottom: 1px solid #eee;
 }
+
 h2 {
-    font-size: 1.5em;
-    color: steelblue;
+    font-size: 1.45em;
 }
-h3 {
+
+h3 {    
     font-size: 1.3em;
-    color: steelblue;
 }
+
 h4 {
     font-size: 1.1em;
 }
-h5, h6 { 
+
+h5, h6 {
     font-size: 1em;
 }
 table {
@@ -47,6 +50,7 @@ table {
 th, td {
     padding: 5px 9px;
     border-bottom: 1px solid #eee;
+    vertical-align: top;
 }
 th {
     background: #eee    
@@ -55,24 +59,89 @@ p {
 	margin: 10px 0 10px 0;
 }
 a {
-    font-weight: bold;
+    font-weight: 600;
 }
 img {
 	max-width: 100%;
 }
-blockquote {
-    background: #f8f8f8;
-    font-size: 1.1em;
-    padding: 10px;
-    margin: 30px 10px;
-    border-left: 6px #ddd solid;
+
+ul, ol {
+    margin: 1.1em 0;
+}
+li {
+    margin: 0.6em 0.2em 0.6em 1em;
+}
+ul > li > ul > li > ul > li { list-style: disc; }
+ul > li > ul > li { list-style: square; }
+
+b, strong {
+    font-weight: 600;
 }
 
-blockquote h3, blockquote h4, blockquote h5 {
-    margin-top: 8px;
+
+
+/* hidden display, but still part of document flow */
+.hidden {
+    display: none;
 }
+.hidden-nowidth {
+    width: 0;    
+}
+.visually-hidden {
+    border: 0;
+    clip: rect(0 0 0 0);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    width: 1px; 
+}
+
+
+    @media(min-width: 1080px) {
+        html, body {
+            font-size: 1.06em;
+        }
+    }
+
+    html, body {
+    color: #333;    
+    font-family:  -apple-system, BlinkMacSystemFont,"Segoe UI", Helvetica,  Helvetica, Arial, sans-serif;        
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    
+    height: 100%;    
+    line-height: 1.5em;
+    padding: 5px 20px 5px 10px !important;
+    margin: 0;
+    scrollbar-track-color: Whitesmoke;
+    scrollbar-arrow-color: silver;   
+    scrollbar-base-color: #ddd;
+    scrollbar-face-color: #ddd;
+    -ms-overflow-style: -ms-autohiding-scrollbar !important;
+} 
+
+
+blockquote {
+    background: #f5f5f5;
+    color: #656565;
+    border-left: 8px #aaa solid;
+    border-radius: 4px;
+    padding: 10px 20px;
+    margin: 30px 20px;
+    font-size: 1.03em;
+}
+    blockquote *:first-child { margin-top: 0; }
+    blockquote *:last-child { margin-bottom: 0; }
+
 hr {
     margin: 12px 0;    
+}
+.figure .caption, figure figcaption {
+    font-size: 0.8em;
+    font-style: italic;
+    margin-top: 0;
 }
 code {
     color: #555;
@@ -93,10 +162,11 @@ pre {
     max-width: 98%;
     white-space:  pre;
     word-break: normal;
-    word-wrap: normal;    
+    word-wrap: normal;
 }
-pre code {
-    white-space: pre;    
+pre>code {
+    white-space: pre;
+    padding: 1em !important;
 }
 table {
     width: 100%;
@@ -111,7 +181,7 @@ td, th {
     border: 1px solid #ddd;
     padding: 6px 13px;
     display: table-cell;
-    vertical-align: inherit;
+    vertical-align: top;
 }
 th {
     font-weight: bold;
@@ -121,6 +191,21 @@ th {
 tbody>tr:nth-child(even) {
     background: #eee;
 }
+
+.line-highlight {
+    background: #e9f5ff !important;
+}
+p.line-highlight, h1.line-highlight, h2.line-highlight, h3.line-highlight, h4.line-highlight {    
+    border-radius: 4px;
+    margin-left: -10px;
+    margin-right: -10px;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+code.line-highlight {
+    background: #555 !important;
+}
+
 
 
 /* hidden display, but still part of document flow */
@@ -148,5 +233,18 @@ tbody>tr:nth-child(even) {
 @media(min-width: 1080px){
     html,body{
         font-size: 1.06em;
+    }
+}
+
+@media print {
+    pre {
+        white-space: pre-wrap;
+        word-break: normal;
+        word-wrap: normal;
+    }
+
+    pre > code {
+        white-space: pre-wrap;
+        padding: 1em !important;
     }
 }

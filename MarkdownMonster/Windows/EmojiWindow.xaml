@@ -1,0 +1,76 @@
+﻿<controls:MetroWindow x:Class="MarkdownMonster.Windows.EmojiWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:MarkdownMonster.Windows"  
+        xmlns:controls="http://metro.mahapps.com/winfx/xaml/controls"
+        mc:Ignorable="d"
+        WindowStyle="ToolWindow" ShowMinButton="False" ShowMaxRestoreButton="False"                      
+        WindowStartupLocation="Manual"  
+        ShowInTaskbar="False"
+        KeyDown="EmojiWindow_KeyDown"       
+        Icon="../assets/MarkdownMonster_Icon_256.png"
+        Title="Pick an Emoji" TitleCharacterCasing="Normal"
+        Height="680" Width="835">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Label Grid.Column="0" Content="Search:" Margin="5,3,10,0"></Label>
+            
+            <TextBox Grid.Column="1"  x:Name="TextSearchText" Grid.Row="0"
+                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                 BorderThickness="0" Opacity="0.70" KeyDown="TextSearchText_Keydown">
+            </TextBox>
+        </Grid>
+        
+        <ListBox  Grid.Row="1" Name="ListEmojis"  ItemsSource="{Binding FilteredEmojiList}"  
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" 
+                 ScrollViewer.VerticalScrollBarVisibility="Auto" 
+                 SelectedValuePath="Key" 
+                 MouseDoubleClick="ListBox_MouseDoubleClick"
+                 KeyUp="ListBox_KeyUp"
+            >
+            <ItemsControl.ItemsPanel >
+                <ItemsPanelTemplate>
+                        <WrapPanel Width="auto"  />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Value}" Margin="8" Height="24" Width="24" FontSize="18"
+                               ToolTip="{Binding Key}"
+                               Opacity="0.70">
+                        <TextBlock.Style>
+                            <Style>
+                            <Style.Triggers>
+                                    <Trigger Property="TextBlock.IsMouseOver" Value="True">
+                                        <!--<Setter Property="TextBlock.Width" Value="50" />
+                                        <Setter Property="TextBlock.Height" Value="50" />-->
+                                        <Setter Property="TextBlock.RenderTransform">
+                                            <Setter.Value>
+                                                <TransformGroup>
+                                                    <TranslateTransform X="-8" Y="-7" />
+                                                    <ScaleTransform ScaleX="1.9" ScaleY="1.9" />
+                                                </TransformGroup>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Trigger>
+                            </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ListBox>
+
+    </Grid>
+</controls:MetroWindow>

@@ -1,4 +1,5 @@
 /// <reference path="editorsettings.js"/>
+/// <reference path="editorsettings.js"/>
 /// <reference path="editorSpellcheck.js"/>
 
 // NOTE: All method and property names have to be LOWER CASE!
@@ -67,42 +68,42 @@ var te = window.textEditor = {
         editor.commands.bindKeys({
             //"alt-k": null,
             "ctrl-n": function () {
-                te.specialkey("ctrl-n");
+                te.keyboardCommand("NewDocument");
                 // do nothing but:
                 // keep ctrl-n browser behavior from happening
                 // and let WPF handle the key
             },
             "ctrl-o": function() {                
                 te.editor.blur(); // HACK: avoid letter o insertion into document
-                te.specialkey("ctrl-o");                
+                te.keyboardCommand("OpenDocument");                
                 setTimeout(function() { te.editor.focus(); }, 20);
             },
-            "ctrl-p": function () { te.specialkey("ctrl-p") },
+            "ctrl-p": function () { te.keyboardCommand("PrintPreview") },
 
-            "f5": function() {},
-            "alt-c": function () { te.specialkey("alt-c"); },
+            "f5": function () { te.keyboardCommand("ReloadEditor") },
+            "alt-c": function () { te.keyboardCommand("InsertCodeblock"); },
             
-            "ctrl-s": function() { te.specialkey("ctrl-s"); },
-            "ctrl-b": function() { te.specialkey("ctrl-b"); },
-            "ctrl-i": function () { te.specialkey("ctrl-i"); },
-            "ctrl-`": function() { te.specialkey("ctrl-`"); },
-            "ctrl-l": function() { te.specialkey("ctrl-l"); },
-            "ctrl-k": function() { te.specialkey("ctrl-k"); },
+            "ctrl-s": function() { te.keyboardCommand("SaveDocument"); },
+            "ctrl-b": function() { te.keyboardCommand("InsertBold"); },
+            "ctrl-i": function () { te.keyboardCommand("InsertItalic"); },
+            "ctrl-`": function() { te.keyboardCommand("InsertInlineCode"); },
+            "ctrl-l": function() { te.keyboardCommand("InsertList"); },
+            "ctrl-k": function() { te.keyboardCommand("InsertHyperlink"); },
 
             // take over Zoom keys and manually zoom
             "ctrl--": function() {
-                te.specialkey("ctrl--");
+                te.keyboardCommand("ZoomEditorDown");
                 return null;
             },
             "ctrl-=": function() {
-                te.specialkey("ctrl-=");
+                te.keyboardCommand("ZoomEditorUp");
                 return null;
             },
-            //"alt-shift-enter": function() { te.specialkey("alt-shift-enter")},
-            "ctrl-shift-down": function() { te.specialkey("ctrl-shift-down"); },
-            "ctrl-shift-up": function() { te.specialkey("ctrl-shift-up"); },
-            "ctrl-shift-c": function() { te.specialkey("ctrl-shift-c"); },
-            "ctrl-shift-v": function() { te.specialkey("ctrl-shift-v"); },
+            //"alt-shift-enter": function() { te.keyboardCommand("alt-shift-enter")},
+            "ctrl-shift-down": function() { te.keyboardCommand("ctrl-shift-down"); },
+            "ctrl-shift-up": function() { te.keyboardCommand("ctrl-shift-up"); },
+            "ctrl-shift-c": function() { te.keyboardCommand("CopyMarkdownAsHtml"); },
+            "ctrl-shift-v": function() { te.keyboardCommand("PasteMarkdownAsHtml"); },
             "ctrl-v": function () { te.mm.textbox.PasteOperation(); }
 
 
@@ -173,9 +174,11 @@ var te = window.textEditor = {
                 te.mousePos = e.getDocumentPosition();
             });
         te.editor.on("mouseup",
-            function() {
-                te.mm.textbox.PreviewMarkdownCallback();
-            });
+          function () {
+            try {
+              te.mm.textbox.PreviewMarkdownCallback();
+            } catch (ex) {}
+          });
 
         return editor;
     },
@@ -227,8 +230,9 @@ var te = window.textEditor = {
     refresh: function(ignored) {
         te.editor.resize(true); //force a redraw
     },
-    specialkey: function(key) {
-        te.mm.textbox.SpecialKey(key);
+  keyboardCommand: function (key) {
+        if (te.mm)
+          te.mm.textbox.keyboardCommand(key);
     },
     setfont: function(size, fontFace, weight) {
         if (size)
@@ -341,9 +345,7 @@ var te = window.textEditor = {
         if (!keyboardHandler || keyboardHandler == "default" || keyboardHandler == "ace")
             te.editor.setKeyboardHandler("");
         else
-            te.editor.setKeyboardHandler("ace/keyboard/" + keyboardHandler);
-
-        setTimeout(te.updateDocumentStats, 100);
+            te.editor.setKeyboardHandler("ace/keyboard/" + keyboardHandler);        
     },
     execcommand: function(cmd,parm1,parm2) {
         te.editor.execCommand(cmd);
@@ -370,30 +372,26 @@ var te = window.textEditor = {
     updateDocumentStats: function() {
         te.mm.textbox.updateDocumentStats(te.getDocumentStats());
     },
-    enablespellchecking: function (disable, dictionary) {
-        if (dictionary)
-            editorSettings.dictionary = dictionary;
-        setTimeout(function() {
-                if (!disable)
-                    spellcheck.enable();
-                else
-                    spellcheck.disable();
-            },
-            100);
+    enablespellchecking: function(disable, dictionary) {
+      if (!te.mm || !window.spellcheck) return;
+
+      if (dictionary)
+        editorSettings.dictionary = dictionary;
+      setTimeout(function() {
+          if (!disable)
+            window.spellcheck.enable();
+          else
+            window.spellcheck.disable();
+        },
+        100);
     },
     isspellcheckingenabled: function(ignored) {
         return editorSettings.enableSpellChecking;
     },
-    checkSpelling: function (word) {        
-        if (!word || !editorSettings.enableSpellChecking)
+  checkSpelling: function (word) {
+      if (!te.mm || !word || !editorSettings.enableSpellChecking)
             return true;
-
-        // use typo
-        if (spellcheck.dictionary) {            
-            var isOk = spellcheck.dictionary.check(word);            
-            return isOk;
-        }
-
+    
         // use COM object        
         return te.mm.textbox.CheckSpelling(word,editorSettings.dictionary,false);
     },
@@ -519,9 +517,9 @@ window.ondragover =
         e.returnValue = false;
 
         if (e.wheelDelta > 0)
-            te.specialkey("ctrl-=");
+            te.keyboardCommand("ZoomEditorUp");
         if (e.wheelDelta < 0)
-            te.specialkey("ctrl--");
+            te.keyboardCommand("ZoomEditorDown");
 
         return false;
     }

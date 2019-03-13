@@ -33,17 +33,18 @@ namespace WebLogAddin
             {
                 var settings = new HttpRequestSettings()
                 {
-                    Url = url
+                    Url = url,
+                    UserAgent = "Markdown-Monster"
                 };
-                settings.Headers.Add("User-Agent",
-                    "User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36");
+                //settings.Headers.Add("User-Agent",
+                //    "User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36");
                 settings.Headers.Add("Accept",
                     "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
 
                 string html = HttpUtils.HttpRequestString(settings);
 
                 // if not HTML assume we are on the endpoint 
-                if (!settings.Response.ContentType.StartsWith("text/html"))                
+                if (!settings.Response.ContentType.StartsWith("text/html"))
                     return result;
 
                 var doc = new HtmlDocument();
@@ -62,6 +63,8 @@ namespace WebLogAddin
                 if (nodes == null || nodes.Count < 1)
                 {
                     // doesn't have RDS data - OK use original URL
+                    result.HasError = true;
+                    result.ErrorMessage = "Couldn't find a Weblog endpoint or RDS link at this URL.";
                     return result;
                 }
 
@@ -121,7 +124,7 @@ namespace WebLogAddin
                 result = new BlogApiEndpoint(apiLink, blogId, blogType, rsd);
             }
             catch (Exception ex)
-            {
+            {                
                 result.HasError = true;
                 result.ErrorMessage = ex.Message;
             }
@@ -165,10 +168,11 @@ namespace WebLogAddin
                 Url = url,
                 ContentType= "text/xml",
                 HttpVerb = "POST",
-                Content = xml                
-            };
-            settings.Headers.Add("User-Agent",
-                "User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36");
+                Content = xml,
+                UserAgent = "Markdown-Monster"
+        };
+            //settings.Headers.Add("User-Agent",
+            //    "User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36");
             settings.Headers.Add("Accept",
                 "Accept: */*");
 

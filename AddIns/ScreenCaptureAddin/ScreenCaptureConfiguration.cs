@@ -2,7 +2,7 @@
 using System.IO;
 using System.Runtime.CompilerServices;
 using MarkdownMonster;
-using SnagItAddin.Annotations;
+using MarkdownMonster.Annotations;
 using Westwind.Utilities.Configuration;
 
 namespace SnagItAddin
@@ -129,9 +129,22 @@ namespace SnagItAddin
             }
         }
 
-        public string ImageEditorPath { get; set; } =
-            @"C:\Program Files\paint.net\PaintDotNet.exe";
 
+        /// <summary>
+        /// Keyboard shortcut for this addin.
+        /// </summary>
+        public string KeyboardShortcut
+        {
+            get { return _keyboardShortcut; }
+            set
+            {
+                if (_keyboardShortcut == value) return;
+                _keyboardShortcut = value;
+                OnPropertyChanged(nameof(KeyboardShortcut));
+            }
+        }
+        private string _keyboardShortcut = string.Empty;
+		
         public double WindowHeight { get; set; } = 730;
         public double WindowWidth { get; set; } = 910;
         

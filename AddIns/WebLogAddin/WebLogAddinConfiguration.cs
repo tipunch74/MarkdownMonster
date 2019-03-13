@@ -79,6 +79,21 @@ Tags:
 ";
         }
 
+        
+        /// <summary>
+        /// Keyboard shortcut for this addin.
+        /// </summary>
+        public string KeyboardShortcut
+        {
+            get { return _keyboardShortcut; }
+            set
+            {
+                if (_keyboardShortcut == value) return;
+                _keyboardShortcut = value;
+                OnPropertyChanged(nameof(KeyboardShortcut));
+            }
+        }
+        private string _keyboardShortcut = string.Empty;
 
         /// <summary>
         /// Determines the folder were new Posts are stored
@@ -108,6 +123,25 @@ Tags:
             }
         }
         private string _postsFolder;
+
+
+        /// <summary>
+        /// Determines if the Post Images are replaced in
+        /// the original Markdown document to reflect the
+        /// new online URL
+        /// </summary>
+        public bool ReplacePostImagesWithOnlineUrls
+        {
+            get { return _replacePostImagesWithOnlineUrls; }
+            set
+            {
+                if (value == _replacePostImagesWithOnlineUrls) return;
+                _replacePostImagesWithOnlineUrls = value;
+                OnPropertyChanged(nameof(ReplacePostImagesWithOnlineUrls));
+            }
+        }
+        private bool _replacePostImagesWithOnlineUrls;
+
 
 
         /// <summary>
@@ -175,6 +209,7 @@ Tags:
         }
         private string _frontMatterTemplate;
 
+        
         public Dictionary<string, WeblogInfo> Weblogs
         {
             get { return _weblogs; }

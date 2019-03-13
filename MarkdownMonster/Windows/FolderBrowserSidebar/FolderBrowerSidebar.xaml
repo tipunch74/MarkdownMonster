@@ -1,0 +1,236 @@
+﻿<UserControl 
+             x:Class="MarkdownMonster.Windows.FolderBrowerSidebar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:fa="http://schemas.fontawesome.io/icons/"
+             xmlns:local="clr-namespace:MarkdownMonster.Windows"
+             xmlns:controls="http://metro.mahapps.com/winfx/xaml/controls"
+             xmlns:i="http://schemas.microsoft.com/expression/2010/interactivity"
+             xmlns:mmcontrols="clr-namespace:MarkdownMonster.Controls"
+             mc:Ignorable="d" MinWidth="165"
+             d:DesignHeight="300" d:DesignWidth="300">
+    <UserControl.Resources>
+        <local:SourceControlIconConverter x:Key="SourceControlIconConverter"/>
+
+        <!--DataType="{x:Type local:PathItem}"-->
+        <HierarchicalDataTemplate x:Key="FolderTemplate"  ItemsSource="{Binding Path=Files}" >
+            <!--<Grid  Width="300" >-->
+            <Grid MouseUp="TreeViewItem_MouseUpClick" MouseDown="TreeViewItem_MouseDownClick" >
+                <Grid.Resources>
+                   
+                </Grid.Resources>
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto" />
+                    <ColumnDefinition Width="auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                
+                <Image Source="{Binding FileStatus,Converter={StaticResource SourceControlIconConverter}}"
+                       Width="6" Margin="1,4,2,0"  />
+
+                <Image Grid.Column="1" Height="17" Width="Auto" Margin="0,0,4,0" >
+                        <Image.Style>
+                            <Style TargetType="Image">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                        <Setter Property="Source" Value="{Binding OpenIcon}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsExpanded}" Value="False">
+                                        <Setter Property="Source" Value="{Binding Icon}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Image.Style>
+                </Image>
+
+
+                <TextBlock Name="TextFileOrFolderName" 
+                           Grid.Column="2"
+                           Text="{Binding DisplayName, Mode=OneWay}" Padding="5,3,15,3"
+				       Visibility="{Binding IsNotEditing, Converter={StaticResource BooleanToVisibilityConverter}}"                                 
+                       MouseUp="TextFileOrFolderName_MouseUpToEdit">
+                    <TextBlock.Style>
+                        <Style TargetType="{x:Type TextBlock}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsFolder}" Value="False">
+                                    <Setter Property="FontWeight" Value="Normal"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+
+                <TextBox Name="TextEditFileItem" Grid.Column="2"
+                        Text="{Binding EditName, Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"
+                        Padding="6 0 10 -3" Margin="0" FontSize="13"                           
+                        Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}" 
+                        LostFocus="TextEditFileItem_LostFocus">
+                    <TextBox.Style>
+                        <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource MetroTextBox}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                <Setter Property="FocusManager.FocusedElement" Value="{Binding RelativeSource={RelativeSource Self}}"/>
+                            </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+                </Grid>
+            <!--</Grid>-->
+        </HierarchicalDataTemplate>
+    </UserControl.Resources>
+
+
+    <Grid Name="FolderBrowserMainGrid" PreviewKeyDown="FolderBrowserGrid_PreviewKeyDown">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Name="SearchPanel" Visibility="Collapsed">
+            <Grid Background="{StaticResource  SidebarHeaderBackground}">
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="auto" />
+                </Grid.ColumnDefinitions>
+
+                
+                    <TextBlock Height="Auto" 
+                           Text="SEARCH" 
+                           FontWeight="Medium" FontSize="12"  Padding="4,5,2,5" />
+                
+
+                <Button fa:Awesome.Content="Remove" Grid.Column="1" Background="Transparent"
+                        Foreground="{DynamicResource BlueItem}" Padding="5,0,5,0"
+                        Name="ButtonCloseSearchPanel" BorderThickness="0"  FontSize="12"
+                        ToolTip="Close Search"
+                        Click="Button_CloseSearch_Click" />
+            </Grid>
+
+            <TextBox x:Name="TextSearch"  Margin="10,10,10,5"             
+             Text="{Binding SearchText,UpdateSourceTrigger=PropertyChanged}" 
+             BorderThickness="0.3"
+             controls:TextBoxHelper.SelectAllOnFocus="True"
+             Opacity="0.7"             
+             PreviewKeyDown="TextSearch_PreviewKeyUp"
+             controls:TextBoxHelper.Watermark="Search Folder"  controls:TextBoxHelper.ClearTextButton="True" />
+
+            <CheckBox IsChecked="{Binding SearchSubTrees}"
+                      Click="CheckBox_Click" Content="Search subtrees"                      
+                      Margin="17,0,10,10">
+                <CheckBox.LayoutTransform>
+                    <ScaleTransform ScaleX="0.85" ScaleY="0.85" />
+                </CheckBox.LayoutTransform>
+            </CheckBox>
+        </StackPanel>
+
+        <Grid Name="GridFolderBrowser" Grid.Row="1" >
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Name="ImagePreviewColumn"  Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid Background="{StaticResource  SidebarHeaderBackground}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal">
+                    <Image Source="../../Assets/folder.png"  Height="16" Width="16" Margin="5,0,0,0" />
+                    <TextBlock Height="Auto" 
+					   Text="Files"  
+					   FontWeight="SemiBold" FontSize="11"  Padding="4,5,2,5" />
+                </StackPanel>
+
+                <Button fa:Awesome.Content="FolderOpen" Grid.Column="1" Background="Transparent"
+			        Foreground="{DynamicResource BlueItem}" Padding="5,0,5,0"
+			        Name="ButtonSelecttFolder" BorderThickness="0"  FontSize="12"
+			        ToolTip="Browse for Folder" 
+			        Click="ButtonSelectFolder_Click" />
+                <Button fa:Awesome.Content="History" Grid.Column="2" Background="Transparent"
+                    Foreground="{DynamicResource BlueItem}" Padding="6,0,6,0" 
+                    Name="ButtonRecentFolders" BorderThickness="0"  FontSize="12"
+                    ToolTip="Recent Folders" 
+                    Click="ButtonRecentFolders_Click" />
+                <Button  fa:Awesome.Content="LocationArrow" Background="Transparent" 
+			         Foreground="{DynamicResource BlueItem}" Padding="6,0,6,0" Grid.Column="3"  
+					 Name="ButtonUseCurrentFolder" BorderThickness="0" FontSize="12"
+			         ToolTip="Set Folder to Active Document's Folder" 
+                     Command="{Binding AppModel.Commands.OpenFolderBrowserCommand}"
+
+			         controls:VisibilityHelper.IsVisible="{Binding AppModel.IsEditorActive}" />
+                <Button  fa:Awesome.Content="Refresh" Background="Transparent" 
+			         Foreground="{DynamicResource BlueItem}" Padding="6,0,6,0" Grid.Column="4"  
+			         Name="ButtonRefreshFolder" BorderThickness="0"  FontSize="12"
+			         ToolTip="Refresh Folder"
+			         Click="ButtonRefreshFolder_Click" />
+                <Button  fa:Awesome.Content="ChevronCircleLeft" Background="Transparent" 
+			         Foreground="{DynamicResource BlueItem}" Padding="7,0,7,0" Grid.Column="5"  
+			         Name="ButtonClosePanel" BorderThickness="0" FontSize="12"
+			         ToolTip="Close Folder Browser Panel" 
+                         Command="{Binding AppModel.Commands.CloseLeftSidebarPanelCommand}"  /> 			         
+            </Grid>
+
+
+
+            <ComboBox Grid.Row="1"
+                 x:Name="ComboFolderPath" 
+                 Text="{Binding FolderPath,UpdateSourceTrigger=LostFocus}"
+	             Opacity="0.60" FontWeight="Medium"                            
+	             ToolTip="{Binding RelativeSource={RelativeSource Self}, Path=Text}"                 
+	             BorderThickness="0" Padding="2"                                                                    
+                 MaxDropDownHeight="275" FontSize="12"
+                 controls:TextBoxHelper.Watermark="Folder Browser Path">
+                <i:Interaction.Behaviors>
+                    <mmcontrols:FileSystemAutoCompleteBehavior />
+                </i:Interaction.Behaviors>
+            </ComboBox>
+
+
+            <!--ContextMenuOpening="TreeFolderBrowser_ContextMenuOpening"-->
+            <TreeView Grid.Row="3" x:Name="TreeFolderBrowser"
+				  ItemTemplate="{StaticResource FolderTemplate}" 
+				  KeyDown="TreeView_Keydown" 
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" 
+		          PreviewMouseLeftButtonDown="TreeFolderBrowser_PreviewMouseLeftButtonDown"                                         
+		          PreviewMouseMove="TreeFolderBrowser_MouseMove"                  
+                  TreeViewItem.Expanded="TreeFolderBrowser_Expanded"                       
+                  Drop="TreeViewItem_Drop"
+				  ItemsSource="{Binding ActivePathItem.Files}"  
+                  BorderThickness="0" ContextMenuOpening="TreeFolderBrowser_ContextMenuOpening">
+                <TreeView.ContextMenu>
+                    <ContextMenu />
+                </TreeView.ContextMenu>
+                <TreeView.ItemContainerStyle>
+                    <Style TargetType="{x:Type TreeViewItem}">
+                        <!-- We have to select the item which is right-clicked on -->
+                        <EventSetter Event="TreeViewItem.PreviewMouseRightButtonUp" Handler="TreeViewItem_PreviewMouseRightButtonUp"/>
+                        <Setter Property="Visibility" Value="{Binding IsVisible,Mode=TwoWay,Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Setter Property="IsSelected" Value="{Binding IsSelected,Mode=TwoWay}" />
+                        <Setter Property="IsExpanded" Value="{Binding IsExpanded,Mode=TwoWay}" />
+
+                        <!--<EventSetter Event="DragOver" Handler="TreeViewItem_DragOver" />-->
+                        <EventSetter Event="Drop" Handler="TreeViewItem_Drop" />
+                    </Style>
+                </TreeView.ItemContainerStyle>
+            </TreeView>
+        </Grid>
+    </Grid>
+</UserControl>

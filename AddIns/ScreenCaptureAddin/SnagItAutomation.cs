@@ -39,7 +39,7 @@ namespace SnagItAddin
     [Serializable]
     public class SnagItAutomation
     {
-        public static string SNAGIT_PROGID = "SnagIt.ImageCapture.1";
+        public static string SNAGIT_PROGID = "SnagIt.ImageCapture";
 
         /// <summary>
         /// The initial directory where files are saved.
@@ -199,6 +199,8 @@ namespace SnagItAddin
             }
 
             dynamic snagIt = SnagItCom;
+
+			
             
             try
             {
@@ -246,10 +248,10 @@ namespace SnagItAddin
                 IsDone = false;
                 snagIt.Capture();
 
-                while (!IsDone)
+                while (!IsDone && !HasError)
                 {     
                     WindowUtilities.DoEvents();
-                    Thread.Sleep(5);
+                    Thread.Sleep(20);
                 }
             }
             catch(Exception ex)
@@ -287,7 +289,7 @@ namespace SnagItAddin
             // a few seconds until Writer has picked up the image.
             if ((DeleteImageFromDisk))
             {
-                var timer = new Timer(
+                new Timer(
                     (imgFile) =>
                     {
                         var image = imgFile as string;
@@ -307,6 +309,7 @@ namespace SnagItAddin
 
         private bool IsDone;
         private bool HasError;
+
         private void SnagImg_OnStateChange(CaptureState newState)
         {            
             if (newState != CaptureState.scsBusy && newState != CaptureState.scsIdle)

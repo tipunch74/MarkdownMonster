@@ -14,11 +14,11 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MahApps.Metro.Controls;
 using MarkdownMonster;
+using MarkdownMonster.Annotations;
 using MarkdownMonster.Windows;
 using ScreenCaptureAddin;
-using SnagItAddin.Annotations;
+using Westwind.Utilities;
 using Brushes = System.Windows.Media.Brushes;
-using MouseEventArgs = System.Windows.Forms.MouseEventArgs;
 using Point = System.Windows.Point;
 using Timer = System.Threading.Timer;
 
@@ -31,6 +31,8 @@ namespace SnagItAddin
 
     {
         #region Externally accessible capture interface
+
+        public AppModel AppModel { get; set; } = mmApp.Model;
 
         public ScreenCaptureConfiguration Configuration { get; set; }
 
@@ -171,11 +173,14 @@ namespace SnagItAddin
         #region Startup and Shutdown
 
         public ScreenCaptureForm()
-        {
-            mmApp.SetTheme(mmApp.Configuration.ApplicationTheme);
-            
+        {            
             InitializeComponent();
-            
+
+            mmApp.SetThemeWindowOverride(this);
+            if (mmApp.Configuration.ApplicationTheme == Themes.Light)
+                CaptureButtonContainer.Background =
+                    (System.Windows.Media.Brush) FindResource("LightThemeTitleBackground");
+
             Loaded += ScreenCaptureForm_Loaded;
             Unloaded += ScreenCaptureForm_Unloaded;
             SizeChanged += ScreenCaptureForm_SizeChanged;
@@ -488,6 +493,9 @@ namespace SnagItAddin
 
         private void tbSave_Click(object sender, RoutedEventArgs e)
         {
+            if (CapturedBitmap == null)
+                return;
+
             if (string.IsNullOrEmpty(SaveFolder))
                 SaveFolder = Path.GetTempPath();
 
@@ -507,10 +515,14 @@ namespace SnagItAddin
             if (result != System.Windows.Forms.DialogResult.OK)
                 return;
 
+            var ext = Path.GetExtension(sd.FileName);
             SavedImageFile = sd.FileName;
             try
             {
-                CapturedBitmap?.Save(SavedImageFile);
+                if (ext == ".jpg" || ext == "jpeg")
+                    ImageUtils.SaveJpeg(CapturedBitmap, SavedImageFile, mmApp.Configuration.JpegImageCompressionLevel);
+                else
+                    CapturedBitmap.Save(SavedImageFile);
             }
             catch (Exception ex)
             {
@@ -543,13 +555,8 @@ namespace SnagItAddin
 
             if (!Cancelled)
             {
-                var exe = ScreenCaptureConfiguration.Current.ImageEditorPath;
-                if (!File.Exists(exe))
-                    exe = Path.Combine(Environment.SystemDirectory, "mspaint.exe");
-                var process = Process.Start(new ProcessStartInfo(exe,$"\"{SavedImageFile}\""));
-            }
-
-
+	            mmFileUtils.OpenImageInImageEditor(SavedImageFile);
+            }			
         }
 
 

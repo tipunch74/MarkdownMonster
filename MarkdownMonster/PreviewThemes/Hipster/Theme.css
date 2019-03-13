@@ -25,31 +25,53 @@ h3 {
     font-size: 1.3em
 }
 h4 {
-    font-size: 1.1em
+    font-size: 1.15em
 }
 h5, h6 { 
-    font-size: 1em;
+    font-size: 1.03em;
 }
 a {
-    font-weight: bold;
+    font-weight: 600;
 }
+
 code {
-    color: firebrick;
+    background: #eee;
+    color: #555;
     padding: 2px 5px;
-    font-weight: bold;
-    background: #eee;    
+    font-weight: 600;
+    font-family: consolas,monospace;
+    border-radius: 3px;
 }
+
 pre {
-    font-family: menlo,consolas,monospace;
-    font-weight: normal;    
-    font-size: 1em;
-    margin: 7px 0;
+    font-family: consolas,monospace;
+    font-size: 0.875em !important;
+    font-weight: normal;
+    line-height: 1.45;
+    margin: 7px 0 !important;
     padding: 0;
     border: 1px solid silver;
-    border-radius: 5px;
-    overflow-x: auto;    
-    max-width: 98%;
+    border-radius: 4px;
+    
+    overflow-x: auto;
+    white-space: pre;
+    word-break: normal;
+    word-wrap: normal;
+
+    background: #333;
+    color: #eee;
 }
+
+    pre > code {
+        white-space: pre;
+        padding: 0.8em !important;
+        display: block;
+
+        font-weight: normal;
+        color: #f5f5f5 !important;
+        background: transparent;        
+    }
+
 
 table {
     width: 100%;
@@ -64,7 +86,7 @@ td, th {
     border: 1px solid #ddd;
     padding: 6px 13px;
     display: table-cell;
-    vertical-align: inherit;
+    vertical-align: top;
 }
 th {
     font-weight: bold;
@@ -77,6 +99,21 @@ tbody>tr:nth-child(even) {
 img {
 	max-width: 100%;
 }
+
+ul, ol {
+    margin: 0.6em 0;
+}
+
+li {
+    margin: 0.6em 0.2em 0.6em 1em;
+}
+ul > li > ul > li > ul > li {
+    list-style: disc;
+}
+
+ul > li > ul > li {
+    list-style: square;
+}
 blockquote {
     font-size: 1em;
     background: #fcfcfc;
@@ -87,6 +124,11 @@ blockquote h3, blockquote h4, blockquote h5 {
 }
 hr{
     margin: 12px 0;    
+}
+.figure .caption, figure figcaption {
+    font-size: 0.8em;
+    font-style: italic;
+    margin-top: 0;
 }
 /* hidden display, but still part of document flow */
 .hidden {
@@ -105,12 +147,36 @@ hr{
     position: absolute;
     width: 1px; 
 }
+
 .line-highlight {
-    background: #f5f5f5;
-    border-radius: 3px;
+    background: #e9f5ff !important;
 }
+p.line-highlight, h1.line-highlight, h2.line-highlight, h3.line-highlight, h4.line-highlight {
+    border-radius: 4px;
+    margin-left: -10px;
+    margin-right: -10px;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+code.line-highlight {
+    background: #444 !important;
+}
+
 @media(min-width: 1080px){
     html,body{
         font-size: 1.08em;
+    }
+}
+
+@media print {
+    pre {
+        white-space: pre-wrap;
+        word-break: normal;
+        word-wrap: normal;
+    }
+
+    pre > code {
+        white-space: pre-wrap;
+        padding: 1em !important;
     }
 }

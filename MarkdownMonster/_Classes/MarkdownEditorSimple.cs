@@ -1,21 +1,49 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
+﻿#region License
+/*
+ **************************************************************
+ *  Author: Rick Strahl 
+ *          © West Wind Technologies, 2016
+ *          http://www.west-wind.com/
+ * 
+ * Created: 04/28/2016
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ **************************************************************  
+*/
+#endregion
+
+using System;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Navigation;
-using MarkdownMonster;
 using MarkdownMonster.Windows;
 
 namespace MarkdownMonster
 {
+    /// <summary>
+    /// A stripped down version of the MarkdownEditor class that is used
+    /// for displaying various edtibable code snippets for the Code Editor
+    /// as well as in various addins. Similar behavior and hookup, but doesn't
+    /// include all the Markdown parsing features and uses a separate template
+    /// that is simpler and less resource intensive.
+    /// 
+    /// If you need to use a code editor as part of an Addin this is the class
+    /// to use. For a usage example, see the PasteCode.xaml form and code behind.
+    /// </summary>
     [ComVisible(true)]
     public class MarkdownEditorSimple
     {
@@ -45,8 +73,6 @@ namespace MarkdownMonster
             wb.Navigate("file:///" + path);
 
             InitialValue = initialValue;
-
-
         }
 
         private void OnDocumentCompleted(object sender, NavigationEventArgs e)
@@ -82,55 +108,6 @@ namespace MarkdownMonster
                     AceEditor?.setlanguage(EditorSyntax);
 
             }
-        }
-
-        public string FindSyntaxFromFileType(string filename)
-        {
-            if (string.IsNullOrEmpty(filename))
-                return "markdown";
-
-            EditorSyntax = "markdown";
-
-            if (filename.ToLower() == "untitled")
-                return "markdown";
-
-            var ext = Path.GetExtension(filename).ToLower().Replace(".", "");
-            if (ext == "md" || ext == "markdown") { }
-            else if (ext == "json")
-                EditorSyntax = "json";
-            else if (ext == "html" || ext == "htm")
-                EditorSyntax = "html";
-
-            else if (ext == "xml" || ext == "config" || ext == "xaml")
-                EditorSyntax = "xml";
-            else if (ext == "js")
-                EditorSyntax = "javascript";
-            else if (ext == "ts")
-                EditorSyntax = "typescript";
-            else if (ext == "cs")
-                EditorSyntax = "csharp";
-            else if (ext == "cshtml")
-                EditorSyntax = "razor";
-            else if (ext == "css")
-                EditorSyntax = "css";
-            else if (ext == "prg")
-                EditorSyntax = "foxpro";
-            else if (ext == "txt")
-                EditorSyntax = "text";
-            else if (ext == "php")
-                EditorSyntax = "php";
-            else if (ext == "py")
-                EditorSyntax = "python";
-            else if (ext == "ps1")
-                EditorSyntax = "powershell";
-            else if (ext == "sql")
-                EditorSyntax = "sqlserver";
-            else if (ext == "rb" || ext == "ruby" || ext=="rake")
-                EditorSyntax = "ruby";
-            else
-                EditorSyntax = "";
-
-            return EditorSyntax;
         }
 
         #region Markdown Editor Methods
@@ -285,18 +262,18 @@ namespace MarkdownMonster
 
                 AceEditor.settheme(
                         mmApp.Configuration.EditorTheme,
-                        mmApp.Configuration.EditorFont,
-                        mmApp.Configuration.EditorFontSize * dpiRatio,
-                        mmApp.Configuration.EditorWrapText,
-                        mmApp.Configuration.EditorHighlightActiveLine,
-                        mmApp.Configuration.EditorShowLineNumbers,
-                        mmApp.Configuration.EditorKeyboardHandler);
+                        mmApp.Configuration.Editor.Font,
+                        mmApp.Configuration.Editor.FontSize * dpiRatio,
+                        mmApp.Configuration.Editor.WrapText,
+                        mmApp.Configuration.Editor.HighlightActiveLine,
+                        mmApp.Configuration.Editor.ShowLineNumbers,
+                        mmApp.Configuration.Editor.KeyboardHandler);
 
                 if (EditorSyntax == "markdown" || this.EditorSyntax == "text")
-                    AceEditor.enablespellchecking(!mmApp.Configuration.EditorEnableSpellcheck, mmApp.Configuration.EditorDictionary);
+                    AceEditor.enablespellchecking(!mmApp.Configuration.Editor.EnableSpellcheck, mmApp.Configuration.Editor.Dictionary);
                 else
                     // always disable for non-markdown text
-                    AceEditor.enablespellchecking(true, mmApp.Configuration.EditorDictionary);
+                    AceEditor.enablespellchecking(true, mmApp.Configuration.Editor.Dictionary);
             }
             catch { }
         }

@@ -7,31 +7,58 @@
 <html>
 <head>
     <title>Markdown Monster - A better Markdown Editor for Windows</title>
-    <meta name="description" content="Markdown Monster is an easy to use Markdown Editor and Weblog Publisher for Windows." />
-    <meta name="keywords" content="markdown, text editor, documentation, editor, windows, weblog, publishing, screen capture, writing, open source, extensible, addins" />
+    
+    <meta name="description" content="Markdown Monster: An easy to use Markdown Editor and Weblog Publishing tool for Windows. Create Markdown with a low key interface that gets out of your way, but provides advanced features to help you be more productive." />
+    <meta name="keywords" content="markdown, windows, markdown editor,text editor,documentation,weblog,publishing,screen capture,writing,documentation,open source,extensible,addins,wpf,dotnet,westwind,rick strahl" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     
-    <meta name="company" content="West Wind Technologies - http://west-wind.com"/>
-    <meta name="author" content="Rick Strahl, West Wind Technologies  - http://weblog.west-wind.com"/>
+    <meta name="company" content="West Wind Technologies - https://west-wind.com"/>
+    <meta name="author" content="Rick Strahl, West Wind Technologies  - https://weblog.west-wind.com"/>
 
 
-    <link href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" rel="stylesheet" />
     <link href="Css/application.css" rel="stylesheet" />
-    <link href="//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.css" rel="stylesheet" />
+    <link href="https://netdna.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.css" rel="stylesheet" />
 
     <link rel="shortcut icon" href="favicon.ico" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <meta content="favicon.png" itemprop="image">
     
-    <style>
+    <style>       
         #ActionButtons {
             width: 100%;
-            margin: 20px auto 40px;
+            margin: 20px auto 10px;
             text-align: center;
         }
         #ActionButtons a {
             background: #333;
             background: linear-gradient(to bottom, #393939, #222);
+        }
+        #Carousel .carousel-inner > img { height: 845px; }
+        #Carousel2 .carousel-inner > .item {
+            margin: 5px 11%;
+        }
+        #ShareBox {
+            flex-direction: row;
+            padding: 0 20px;
+            height: 50px;
+            background: #252525;
+
+            display: flex;
+            flex-direction: row;                    
+        }
+        .share-buttons {
+            display: inline;
+            font-size: 35px;
+            padding: 0;                    
+        }
+        .share-buttons li {
+            display: inline;
+            list-style: none;
+            padding-right: 20px;
+        }
+        .share-buttons a {
+            text-decoration: none;
         }
     </style>
     
@@ -43,38 +70,53 @@
     <meta property="og:description" content="Markdown Monster is an easy to use Markdown Editor and Weblog Publisher for Windows.">
     <meta property="og:url" content="https://markdownmonster.west-wind.com">
     
-    <meta property="og:image" content="https://markdownmonster.west-wind.com/Images/MarkdownMonsterMonsterBigger.png">
+    <meta property="og:image" content="https://markdownmonster.west-wind.com/Images/MarkdownMonsterLogo.jpg">
     <meta property="og:image:type" content="image/png">
     <meta property="og:image:width" content="1024">
     <meta property="og:image:height" content="639">
+
+    <meta name="twitter:card" content="https://markdownmonster.west-wind.com/Images/MarkdownMonsterLogo.jpg">
+    <meta name="twitter:site" content="@markdownmonstr">
+    <meta name="twitter:title" content="Markdown Monster - a better Markdown Editor and Weblog Publisher for Windows">
+    <meta name="twitter:description" content="Markdown Monster is an interactive Markdown Editor dedicated to optimizing Markdown content creation with a capable sytnax highlighted editor, live preview, inline spell-checking and many out of your way helpers that facilitate embedding images, links, code, tables, emojiis and more.">
+    <meta name="twitter:creator" content="@markdownmonstr">
+    <meta name="twitter:image" content="https://markdownmonster.west-wind.com/Images/MarkdownMonsterLogo.jpg">
+    <meta name="twitter:domain" content="markdownmonster.west-wind.com">
 </head>
 <body>
     <div class="banner">
-        <span class="banner-title hidable" style="cursor: pointer;" onclick="window.location = './';">
+        <span class="banner-title" style="cursor: pointer;" onclick="window.location = './';">
             <img src="Images/MarkdownMonster_Icon_32.png"
                 style="height: 28px;"
                 alt="Markdown Monster" />
-            <span class="hidable-xs">West Wind</span> <span>Markdown Monster</span>
+            <span class="hidable-xs">Markdown Monster</span>
         </span>
         <nav id="TopMenu" class="right">
             <a href="./" class="active">
                 Home
             </a>
+            <a href="download.aspx" class="hidable" title="Download Markdown Monster">                
+                Download
+            </a>
             <a href="https://www.youtube.com/watch?v=XjFf57Ap9VE">                
                 Video
             </a>
-            <%--<a href="features.aspx">Features</a>--%>
-            <a href="download.aspx" class="hidable-xs">                
-                Download
+            <a href="docs/_4rd0xigys.htm" title="Markdown Monster Features">                
+                Features
             </a>
-            <a href="http://store.west-wind.com/product/markdown_monster">                
+            <%--<a href="features.aspx">Features</a>--%>           
+            <a href="purchase.aspx" title="Purchase Markdown Monster">                
                 Buy
             </a>                 
-            <a href="https://support.west-wind.com/Thread4NM0M17RC.wwt" class="hidable">                
+            <a href="https://support.west-wind.com/Thread4NM0M17RC.wwt" class="hidable" title="Support for Markdown Monster">                
                 Support
             </a>
-            <a href="docs/">                
+        
+            <a href="docs/" title="Markdown Monster Documentation">                
                 Docs
+            </a>            
+            <a href="https://medium.com/markdown-monster-blog/" title="Markdown Monster Weblog" class="hidable">                
+                Blog
             </a>
             <%--<a href="pricing.aspx">License</a>--%>
         </nav>
@@ -87,12 +129,13 @@
             <header style="background-color: #535353; color: whitesmoke;">
                                
                 
-                <div style="background: black; padding: 0 0;position: relative">
-                    <div style="width: 100%;margin: 0 4%;">
-                        <img src="Images/MarkdownMonsterMonsterBigger.png" alt="Markdown Monster"  />
+                <div style="background: black; padding: 0 0; position: relative;">
+                    <div >
+                        <img src="Images/MarkdownMonsterLogo.jpg" alt="Markdown Monster"  style="max-width: 75%;margin: 0 15% 0 10%;" />
                           <a href="https://github.com/rickstrahl/MarkdownMonster">
-                     <img style="position: absolute; top:0; right: 0; border: 0;" src="https://camo.githubusercontent.com/652c5b9acfaddf3a9c326fa6bde407b87f7be0f4/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6f72616e67655f6666373630302e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_orange_ff7600.png">
-                 </a>
+                             <img style="position: absolute; top:0; right: 0; border: 0;" 
+                                  src="https://camo.githubusercontent.com/652c5b9acfaddf3a9c326fa6bde407b87f7be0f4/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6f72616e67655f6666373630302e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_orange_ff7600.png">
+                          </a>
                         
                         
                          <nav id="ActionButtons" >                            
@@ -109,28 +152,16 @@
                                >
                                 <i class="fa fa-youtube"></i>
                                 Video
-                            </a>
-                           
-                             
-                            
-                            <%-- <a href="http://chocolatey.org/WestwindMarkdownMonster" class="btn btn-lg btn-success" style="background: #222" >
-                                <i class="fa  fa-cloud-download"></i>
-                                 <i class="fa fa-"></i>
-                                 Chocolatey
-                            </a>--%>
-                           
+                            </a>                            
                             <br />
                             <small style="font-size: 8pt;"><i>version <%= Version %> - <%= ReleaseDate%></i></small>
                         </nav>
                         
-                        
-
-                        <h1 style="font-weight: bold; display: none">Markdown Monster</h1>
-                        
+                        <h1 style="font-weight: bold; display: none">Markdown Monster</h1>                        
                     </div>
     
-                    <div class="top-bullet-box">
-                        <h4 style="color: #ffd281;">Extensible Markdown Editing and Weblog Publishing</h4>
+                    <div class="top-bullet-box" style="margin: 0;">
+                        <h3 style="color: #ffd281;">Markdown Editing and Weblog Publishing on Windows</h3>
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="bullet-box-items">
@@ -148,11 +179,11 @@
                                     </div>
                                     <div>
                                         <i class="fa fa-check" style="color: lightgreen"></i>
-                                        Image & link embedding
+                                        Embed images, links and emoji
                                     </div>
                                     <div>
                                         <i class="fa fa-check" style="color: lightgreen"></i>
-                                        Paste Images from Clipboard
+                                        Paste images from Clipboard
                                     </div>
                                     <div>
                                         <i class="fa fa-check" style="color: lightgreen"></i>
@@ -160,17 +191,17 @@
                                     </div>
                                     <div>
                                         <i class="fa fa-check" style="color: lightgreen"></i>
-                                        Print generated HTML ouput
+                                        Save to Html and Pdf
                                     </div>                              
                                 </div>
                             </div>
                             <div class="col-md-6">
 
-                                <div class="bullet-box-items">
+                                <div class="bullet-box-items">                                    
                                     <div>
                                         <i class="fa fa-check" style="color: lightgreen"></i>
-                                        Gentle toolbar support
-                                    </div>
+                                        Weblog publishing and editing
+                                    </div> 
                                     <div>
                                         <i class="fa fa-check" style="color: lightgreen"></i>
                                         HTML to Markdown conversion
@@ -179,81 +210,101 @@
                                         <i class="fa fa-check" style="color: lightgreen"></i>
                                         Editor and preview themes
                                     </div>
+                                                                                                        
                                     <div>
                                         <i class="fa fa-check" style="color: lightgreen"></i>
-                                        Weblog publishing and editing
-                                    </div>                         
+                                        Git Integration
+                                    </div>  
                                     <div>
                                         <i class="fa fa-check" style="color: lightgreen"></i>
-                                        Template expansion with snippets
-                                    </div>           
+                                        Document Outline
+                                    </div>
                                     <div>
                                         <i class="fa fa-check" style="color: lightgreen"></i>
-                                        Vim and Emacs support
-                                    </div>           
+                                        Template text expansion
+                                    </div>   
                                     <div>
                                         <i class="fa fa-check" style="color: lightgreen"></i>
-                                        Extensible with .NET add-ins
+                                        .NET scripting & addins
                                     </div>
                                 </div>
                             </div>
                         </div>
                         
-                        
                        
                     </div>
-                </div>
-            </header>
 
-            
-            <article class="content" >
-                <div class="right created-by">
+                     
+                            
+            <div id="ShareBox">
+                    <div style="flex: none; align-self: center;margin-right: 20px;">Share on:</div>    
+                    <div class="pull-left" style="flex: none">  
+                    
+                    <ul class="share-buttons" style="flex: none">
+                         <li>
+                            <a href="https://twitter.com/intent/tweet?source=https://markdownmonster.west-wind.com/&amp;text=Check out Markdown Monster - A better better Markdown Editor and Weblog Publisher for Windows: https://markdownmonster.west-wind.com" target="_blank" title="Tweet">
+                                <i class="fa fa-twitter-square"></i>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="https://www.facebook.com/sharer/sharer.php?u=https://markdownmonster.west-wind.com/&amp;t=Markdown Monster - A better better Markdown Editor and Weblog Publisher for Windows" target="_blank" title="Share on Facebook">
+                                <i class="fa fa-facebook-square"></i>
+                            </a>
+                        </li>                       
+                        <li>
+                            <a href="http://www.reddit.com/submit?url=https://markdownmonster.west-wind.com/&amp;title=Markdown Monster - A better better Markdown Editor and Weblog Publisher for Windows" target="_blank" title="Submit to Reddit">
+                                <i class="fa fa-reddit-square"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="right created-by" style="margin-bottom: 2px; flex: 1 1 auto;align-self: flex-end">
                     <div style="font-size: xx-small">created by:</div>
                     <a href="http://west-wind.com">
                         <img src="/Images/wwToolbarLogo.png" 
                             style="height: 30px" alt="West Wind Technologies" />
                     </a>
                 </div>
+            </div>
 
-                <h3>Better Markdown Editing for Windows</h3>
-                <p>
-                    Markdown is everywhere and many of us are using Markdown for all sorts
-                    of different purposes. Wouldn't it be nice if you have an editor that can keep 
-                    up with <strong>all</strong> of those scenarios?
-                </p>
-                <p>                    
-                    Markdown Monster is a responsive Markdown editor that lets you edit Markdown with syntax highlighting
-                    and super fast text entry. A collapsable synced, live preview lets you preview your output as you type.
-                    You can export Markdown to HTML by saving to disk or by exporting text selections of Markdown generated HTML directly to the clipboard.
-                    Inline spell-checking and word counts keep your content streamlined, and a handful of optional  
-                    toolbar and menu options help you to streamline embedding of links, images and code into your Markdown. 
-                    Our preview can display syntax colored code snippets for most common coding languages, and it can 
-                    easily be customized with HTML and CSS template to match your own sites and preferences. You can
-                    choose from a number of editor and preview themes and you can even use Vim or EMacs type conventions.
-                    Other convenience features let you jump to the current folder in Explorer or a Command window,
-                    print the current document's HTML output, and more.
-                </p>
-
-                <h3>Weblog Publishing</h3>
-                <p>
-                    Markdown Monster also can publish your Markdown to your Weblog quickly and easily.
-                    If your Weblog supports WordPress or MetaWeblog APIs we can publish your documents to
-                    your blog with minimal effort. You can also edit and republish, or download existing
-                    posts and even convert them from HTML to Markdown.
-                 </p>
                 
-                <h3>Extensible via .NET Addins</h3>
-                 <p>
-                    In addition to building an attractive and highly functional Markdown editor and viewer, we
-                    also wanted to make sure <b>the editor is highly extensible</b>, so you can plug in custom features
-                    of your own. Markdown Monster's .NET based add-in API makes it easy to build
-                    extensions that let you hook into the UI, the editor behavior and the publishing
-                    process. We use this same add-in API to build some of Markdown Monster's internal features 
-                    like the Weblog Publisher and Screen Capture. The sky's the limit. Find out more about 
-                    <a href="http://markdownmonster.west-wind.com/docs/_4ne0s0qoi.htm" target="top">
-                    creating an addin with .NET</a>.
-                </p>                
+</div>
+            </header>
+           
+           <style>
+               article p {
+                   line-height: 1.5em;
+                   font-size: 1.1em;
+               }
+           </style>
+            <article class="content" >
+           
 
+            <h3 style="clear: both">Better Markdown Editing for Windows</h3>
+            <p>
+                Markdown is everywhere these days and it's used for all sorts
+                of different purposes. Wouldn't it be nice if you have an editor that can keep 
+                up with <strong>all</strong> of those scenarios?
+            </p>
+                
+            <p>                    
+                Markdown Monster is a Markdown editor and viewer that lets you edit Markdown with syntax highlighting
+                and fast text entry. A collapsible, synced, live preview lets you see your output as you type.
+                Easily embed images, links, emojis and code using Markdown text or use our gentle UI
+                helpers that simplify many operations a couple of keystrokes. Paste images from the clipboard or drag and drop from Explorer or our built-in folder browser.
+                Inline spell-checking and word counts keep your content streamlined unobtrusively.
+            </p>
+                
+                
+            <p>
+                Export your Markdown to HTML or PDF by saving to disk or by copying Markdown selections as
+                HTML directly to the clipboard. The HTML preview can display syntax colored code snippets 
+                for most common coding languages, and can easily be customized with HTML and CSS template to match 
+                your own sites. You can choose from a light and dark theme, and choose individual editor and  
+                preview themes that are fully customizable. You can even use Vim or EMacs type conventions. Other convenience features let you browse for and 
+                select files in the built-in folder browser, use the document outline to jump through sections in your Markdown, or shell out to Explorer, Terminal or your favorite Git client. It's all about convenience - everything you need at your finger tips.
+            </p>
+                
                 <div class="content" style="padding: 0 0 20px">
                     <%-- <h2>Ready to get started?</h2>
                 <p>
@@ -262,7 +313,7 @@
                     simple and easy to use, and that's the way it should be
                     to make it quick and easy to test your Web sites.
                 </p>--%>
-                    <div id="Carousel" class="carousel slide" data-ride="carousel">
+                    <div id="Carousel" class="carousel slide" data-ride="carousel" style="margin-right: -7%; margin-left: -7%">
                         <!-- Indicators -->
                         <ol class="carousel-indicators">
                             <li data-target="#Carousel" data-slide-to="0" class="active"></li>
@@ -277,25 +328,28 @@
                                 <div class="carousel-caption">
                                 </div>
                             </div>
+                                        
                             
                             <div class="item">
-                                <img src="Images/CodeSnippetInEditor.png" />
+                                <img src="Images/screenshot_light.png" />
                                 <div class="carousel-caption">
                                 </div>
                             </div>
-
-							<div class="item">
+                            
+                            
+                            <div class="item">
                                 <img src="Images/WeblogPublishingAddin.png" />
                                 <div class="carousel-caption">
                                 </div>
                             </div>
-                            
+
                             <div class="item">
-                                <img src="Images/WeblogPublishingAddin_Download.png" />
+                                <img src="Images/CommitToGit.png" />
                                 <div class="carousel-caption">
                                 </div>
                             </div>
-                            
+
+						    
                             <div class="item">
                                 <img src="Images/ScreenCapture.png" />
                                 <div class="carousel-caption">
@@ -318,6 +372,148 @@
                             <span class="glyphicon glyphicon-chevron-right"></span>
                         </a>
                     </div>
+                
+
+             
+
+                <h4>Weblog Publishing</h4>
+                <p>
+                    Markdown Monster can also publish your Markdown directly to your Weblog. If your blog supports 
+					WordPress, MetaWeblog or Medium, you can publish your documents with one click. You can also edit and republish, or download existing posts and even convert existing posts from HTML to Markdown.
+                 </p>
+                
+                <h4>Extensible via .NET</h4>
+                 <p>
+                    We also wanted to make sure <b>the editor is highly extensible</b>, so you can add custom features of your own. Markdown Monster includes an addin model that makes it easy to build
+                    extensions that let you hook into the UI, the editor behavior and the publishing
+                    process. We also provide useful Scripting and Text Templating addins that
+					let you automate many tasks without creating an addin. Find out more about 
+                    <a href="http://markdownmonster.west-wind.com/docs/_4ne0s0qoi.htm" target="top">
+                    creating an addin with .NET</a>.
+                </p>                
+
+                    <h4>What our Users say</h4>
+                    <p>
+                    We work hard at building an editor that you love to use, and that provides you with the features you need.
+                    Your <a href="https://github.com/rickstrahl/MarkdownMonster/issues">feedback matters</a> and we'd love to
+                    hear your suggestions and see you get involved. 
+                    </p>
+                    <p style="margin-bottom: 14px;">But don't take our word for it - here is what some of 
+                    our users are saying about Markdown Monster:
+                    </p>
+
+                    <!-- Tweets  -->  
+                    <div id="Carousel2" class="carousel slide" data-ride="carousel" style="margin-right: -7%; margin-left: -7%">
+                        <!-- Indicators -->
+                        <ol class="carousel-indicators">
+                            <li data-target="#Carousel" data-slide-to="0" class="active"></li>
+                        </ol>
+
+                        <!-- Wrapper for slides -->
+                        <div class="carousel-inner" >
+                              
+                            <div class="item active">
+                                <img src="Images/Tweets/JeremyMorgan.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>
+
+                            <div class="item">
+                                <img src="Images/Tweets/James_M_South.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>
+
+
+                            <div class="item">
+                                <img src="Images/Tweets/angrypets.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>
+
+                            <div class="item">
+                                <img src="Images/Tweets/atlantabass.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>
+                            
+                            <div class="item">
+                                <img src="Images/Tweets/Cook.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>
+                            
+                            <div class="item">
+                                <img src="Images/Tweets/honeycutt.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>
+                            
+                            <div class="item">
+                                <img src="Images/Tweets/pence.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>
+
+                            
+                            <div class="item">
+                                <img src="Images/Tweets/Anaerin.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>
+
+							<div class="item">
+                                <img src="Images/Tweets/sstranger.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>
+                            
+                            <div class="item">
+                                <img src="Images/Tweets/DougHennig.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>
+                            
+                            <div class="item">
+                                <img src="Images/Tweets/pence2.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>	
+
+                            <div class="item">
+                                <img src="Images/Tweets/benb.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>
+
+                    
+                            <div class="item">
+                                <img src="Images/Tweets/James_Willock2.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>	
+                                                        
+                            
+                            <div class="item">
+                                <img src="Images/Tweets/vmoench.png" />
+                                <div class="carousel-caption">
+                                </div>
+                            </div>	
+                  
+                        
+                        </div>
+
+                        <!-- Controls -->
+                        <a class="left carousel-control" href="#Carousel2" data-slide="prev">
+                            <span class="glyphicon glyphicon-chevron-left"></span>
+                        </a>
+                        <a class="right carousel-control" href="#Carousel2" data-slide="next">
+                            <span class="glyphicon glyphicon-chevron-right"></span>
+                        </a>
+                    </div>
+                    
+                    <small>Want to share your excitement for Markdown Monster? Tweet to <a href="https://twitter.com/markdownmonstr">@markdownmonstr</a> and tell us how Markdown Monster improves your world.</small>
+
                 </div>
                 
                 
@@ -344,10 +540,6 @@
                                         Inline spell checking
                                     </div>
                                     <div>
-                                        <i class="fa fa-check-circle"></i>
-                                        Gentle toolbar support
-                                    </div>
-                                    <div>
                                         <i class="fa fa-check-circle"></i> 
                                         Easy image and link embedding
                                     </div>
@@ -357,11 +549,33 @@
                                     </div>
                                     <div>
                                         <i class="fa fa-check-circle"></i>
-                                        Built in screen captures
+                                        Gentle toolbar support
                                     </div>
                                     <div>
                                         <i class="fa fa-check-circle"></i>
-                                        Import Html into Markdown
+                                        File and Folder Browser
+                                    </div>
+                                    <div>
+                                        <i class="fa fa-check-circle"></i>
+                                        Document Outline
+                                    </div>                                                                         
+                                    <div>
+                                        <i class="fa fa-check-circle"></i>
+                                        Git Integration
+                                    </div>
+                                    
+                                    <div>
+                                        <i class="fa fa-check-circle"></i>
+                                        Built in screen capture
+                                    </div>
+                                    <div>
+                                        <i class="fa fa-check-circle"></i>
+                                        Two-way Table Editor
+                                    </div>
+                                    
+                                    <div>
+                                        <i class="fa fa-check-circle"></i>
+                                        Import Html to Markdown
                                     </div>
                                     <div>
                                         <i class="fa fa-check-circle"></i>
@@ -369,11 +583,15 @@
                                     </div>
                                     <div>
                                         <i class="fa fa-check-circle"></i>
-                                        Many editor themes
+                                        Dark and Light UI Themes
+                                    </div>                                    
+                                    <div>
+                                        <i class="fa fa-check-circle"></i>
+                                        Customize Preview Themes
                                     </div>
                                     <div>
                                         <i class="fa fa-check-circle"></i>
-                                        Customizable preview themes
+                                        High DPI Support
                                     </div>
                                     <div>
                                         <i class="fa fa-check-circle"></i>
@@ -381,21 +599,25 @@
                                     </div>
                                     <div>
                                         <i class="fa fa-check-circle"></i>
-                                        Html Editing with Live Preview
-                                    </div>    
+                                        Yaml Meta Data Support
+                                    </div>
                                     <div>
                                         <i class="fa fa-check-circle"></i>
-                                        Expandable text templates
-                                    </div>                                        
+                                        Snippet Expansion Templates
+                                    </div>   
+									<div>
+										<i class="fa fa-check-circle"></i>
+										Swappable Markdown Parsers
+									</div>
                                     <div>
                                         <i class="fa fa-check-circle"></i>
                                         Extensible with .NET Add-ins
-                                    </div>                                    
+                                    </div>                                                                         
                                 </div>
                             </div>
                         </div>
 
-                        <div class="col-sm-6">
+                        <div class="col-sm-6" >
                             <div class="panel panel-default">
                                 <div class="panel-heading">
                                     <h5 class="panel-title">Get it</h5>
@@ -405,9 +627,9 @@
                                     You can simply download and install Markdown Monster from
                                     our Web site.
                                     </p>
-                                    <div style="margin: 10px;">
+                                    <div style="margin: 21px 10px;">
                                         <a href="download.aspx" style="display: block; margin-bottom: 15px;">
-                                            <img src="/images/download.gif" class="boxshadow roundbox">
+                                            <img src="images/download.gif" class="boxshadow roundbox">
                                         </a>
                                     </div>
                                     
@@ -416,7 +638,7 @@
                                             Alternately you can also install Markdown Monster 
                                     using the Chocolatey installer:
                                         </p>
-                                        <div style="margin: 10px;">
+                                        <div style="margin: 20px 10px;">
                                             <a href="http://chocolatey.org/packages/MarkdownMonster" style="display: block">
                                                 <img src="images/chocolatey.png" style="width: 170px;margin-bottom: 8px; display: block;" alt="Chocolatey" />
                                             </a>
@@ -429,18 +651,25 @@
                                         </div>
                                     </div>
                                  
-
+                                    <p>
+                                        <i class="fa fa-newspaper-o" style="color: gold"></i>
+                                        <a href="https://github.com/RickStrahl/MarkdownMonster/blob/master/Changelog.md">
+                                            
+                                            Check out what's new
+                                        </a>
+                                    </p>
 
                                     <b>Requirements
                                     </b>
                                     <p>
                                         <ul>
-                                            <li>Windows Vista or newer, 2008 or newer</li>
-                                            <li>.NET Framework 4.5 or later</li>
-                                            <li>Internet Explorer 11 or 10</li>
+                                            <li>Windows 7 or newer, 2008 R2 or newer</li>
+                                            <li>.NET Framework 4.62 or later<br />
+                                                (<a href="http://smallestdotnet.com">check</a> or <a href="https://www.microsoft.com/net/download/framework">download</a>)</li">
+                                            <li>Internet Explorer 11</li>
                                         </ul>
-                                    </p>                                    
-                                    <div style="margin-top: 15px">                                        
+                                   
+                                    <div style="margin-top: 10px">                                        
                                        <a style="font-size: 1.4em" href="http://twitter.com/MarkdownMonstr"><i class="fa fa-twitter"></i>
                                            Follow us on Twitter
                                        </a>
@@ -472,17 +701,19 @@
            
         </div> 
         </div><!-- flex -->
+        
+        <nav class="banner banner-bottom" >
+            <div class="right">
+                created by:<br />
+                <a href="http://west-wind.com/" style="padding: 0;">
+                    <img src="Images/wwToolbarLogo.png" style="width: 150px;" />
+                </a>
+            </div>
+            &copy; West Wind Technologies, <%= DateTime.Now.Year %>
+        </nav>
     </div>
 
-    <nav class="banner" style="font-size: 8pt; padding: 10px; height: 80px; margin: 0; border-top: solid black 4px; border-bottom: none;">
-        <div class="right">
-            created by:<br />
-            <a href="http://west-wind.com/" style="padding: 0;">
-                <img src="/Images/wwToolbarLogo.png" style="width: 350px;" />
-            </a>
-        </div>
-        &copy; West Wind Technologies, <%= DateTime.Now.Year %>
-    </nav>
+    
 
     <script src="//code.jquery.com/jquery-1.11.0.min.js"></script>
     <script src="Css/js/bootstrap.min.js"></script>
@@ -493,6 +724,12 @@
             $("#Carousel").carousel({
                 interval: false
             });
+
+
+            $("#Carousel2").carousel({
+                interval: 8000
+         });
+
 
             //Enable swiping...
             $(".carousel-inner").swipe({
@@ -506,17 +743,25 @@
                 //Default is 75px, set to 0 for demo so any distance triggers swipe
                 threshold: 0
             });
+
+            $(".carousel-inner img").click(function() {
+                window.open(this.src);
+            });
         });
     </script>
+<% if (!Request.Url.ToString().Contains("localhost"))
+   { %>
 
+    <!-- Global Site Tag (gtag.js) - Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-9492219-14"></script>
     <script>
-      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
-      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
-      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
-      })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
-      ga('create', 'UA-9492219-14', 'auto');
-      ga('send', 'pageview');
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments) };
+        gtag('js', new Date());
+
+        gtag('config', 'UA-9492219-14');
     </script>
+<% } %>
 </body>
 </html>
 <script runat="server">
@@ -526,7 +771,6 @@
     {
         get
         {
-
             if (_version != null && DateTime.UtcNow.Subtract(_lastAccess).TotalMinutes < 10)
                 return _version;
 

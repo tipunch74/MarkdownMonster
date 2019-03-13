@@ -1,4 +1,4 @@
-﻿#region License
+﻿#region 
 /*
  **************************************************************
  *  Author: Rick Strahl 
@@ -31,63 +31,195 @@
 */
 #endregion
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
-using System.Drawing.Imaging;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
+using System.Windows.Threading;
+using Markdig;
+using Markdig.Syntax;
 using MarkdownMonster.AddIns;
+using MarkdownMonster.Annotations;
+using MarkdownMonster.Utilities;
 using MarkdownMonster.Windows;
 using Microsoft.Win32;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using NHunspell;
 using Westwind.Utilities;
-using Encoder = System.Text.Encoder;
 
 
 namespace MarkdownMonster
 {
+
+    /// <summary>
+    /// Wrapper around the Editor WebBrowser Control and the embedded
+    /// Ace Editor instance that is contained within it. This class 
+    /// manages creation of the WebBrowser instance and handles configuration
+    /// and event firing. It also provides event interfaces for AceEditor
+    /// callbacks and methods to affect the behavior of the AceEditor instance
+    /// using the low level AceEditor property.
+    /// </summary>
     [ComVisible(true)]
-    public class MarkdownDocumentEditor 
+    public class MarkdownDocumentEditor : INotifyPropertyChanged
+
     {
+        /// <summary>
+        /// Instance of the Web Browser control that hosts ACE Editor
+        /// </summary>
         public WebBrowser WebBrowser { get; set; }
 
-        public MainWindow Window { get; set;  }
 
+        /// <summary>
+        /// Reference back to the main Markdown Monster window that 
+        /// </summary>
+        public MainWindow Window { get; set; }
+
+
+        /// <summary>
+        /// References the loaded MarkdownDocument instance. Note this 
+        /// value can be null before the document has been loaded.
+        /// </summary>
         public MarkdownDocument MarkdownDocument { get; set; }
 
         public dynamic AceEditor { get; set; }
-        public string EditorSyntax { get; set; }
+
+
+        public string EditorSyntax
+        {
+            get => _editorSyntax;
+            set
+            {
+                if (value == _editorSyntax) return;
+                _editorSyntax = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _editorSyntax;
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public EditorSplitModes SplitMode
+        {
+            get => _splitMode;
+            set
+            {
+                if (value == _splitMode) return;
+                _splitMode = value;
+                OnPropertyChanged(nameof(SplitMode));
+            }
+        }
+        private EditorSplitModes _splitMode;
+
+
+        public int InitialLineNumber { get; set; }
+
+        #region Behavior Properties and Storage
+
+        /// <summary>
+        /// Determines whether the editor displays as a read-only document
+        /// </summary>
+        public bool IsReadOnly { get; set; }
+
+
+        /// <summary>
+        /// Determines if the the document is treated as a preview
+        /// </summary>
+        public bool IsPreview
+        {
+            get => _isPreview;
+            set
+            {
+                if (value == _isPreview) return;
+                _isPreview = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private bool _isPreview;
+
+        /// <summary>
+        /// Determines whether the editor is initially focused
+        /// </summary>
+        public bool NoInitialFocus { get; set; }
+
+        /// <summary>
+        /// Determines if the editor requires an HTML preview window
+        /// </summary>
+        public bool HasHtmlPreview { get; set; }
+
+
+
+
+        /// <summary>
+        /// Optional identifier that lets you specify what type of
+        /// document we're dealing with.
+        /// 
+        /// Can be used by Addins to create customer editors or handle
+        /// displaying the document a different way.
+        /// </summary>
+        public string Identifier { get; set; } = "MarkdownDocument";
+
+        /// <summary>
+        /// Optional storage object that allows you to store additional data
+        /// for the document. Useful for plug-ins that may want to keep things
+        /// with the document for rendering or other purposes.
+        /// </summary>
+        public Dictionary<string, object> Properties { get; } = new Dictionary<string, object>();
+        #endregion
+
+
+        public EditorAndPreviewPane EditorPreviewPane { get; private set; }
 
         #region Loading And Initialization
-        public MarkdownDocumentEditor(WebBrowser browser)
+
+        public MarkdownDocumentEditor()
         {
-            WebBrowser = browser;        
+
+            Window = mmApp.Model.Window;
+
+            EditorPreviewPane = new EditorAndPreviewPane();
+
+            WebBrowser = EditorPreviewPane.EditorWebBrowser;
+            WebBrowser.Visibility = Visibility.Hidden;
+            WebBrowser.Navigating += WebBrowser_NavigatingAndDroppingFiles;
+
+            AttachPreviewBrowser();
         }
 
 
+        
         /// <summary>
         /// Loads a new document into the active editor using 
         /// MarkdownDocument instance.
         /// </summary>
         /// <param name="mdDoc"></param>
-        public void LoadDocument(MarkdownDocument mdDoc = null)
-        {            
+        public void LoadDocument(MarkdownDocument mdDoc = null, bool forceReload = false)
+        {
             if (mdDoc != null)
                 MarkdownDocument = mdDoc;
 
             if (AceEditor == null)
             {
                 WebBrowser.LoadCompleted += OnDocumentCompleted;
-                WebBrowser.Navigate("file:///" + Path.Combine(Environment.CurrentDirectory, "Editor\\editor.htm"));
+                WebBrowser.Navigate(new Uri(Path.Combine(Environment.CurrentDirectory, "Editor\\editor.htm")));
+                //WebBrowser.Navigate("http://localhost:8080/editor.htm");
             }
-            FindSyntaxFromFileType(MarkdownDocument.Filename);            
+            else if (forceReload)
+                WebBrowser.Navigate(new Uri(Path.Combine(Environment.CurrentDirectory, "Editor\\editor.htm")));
+
+            EditorSyntax = mmFileUtils.GetEditorSyntaxFromFileType(MarkdownDocument.Filename);
         }
 
 
@@ -101,7 +233,9 @@ namespace MarkdownMonster
 
                 try
                 {
-                    AceEditor = window.initializeinterop(this);                 
+
+                    var jsonStyle = GetJsonStyleInfo();
+                    AceEditor = window.initializeinterop(this,jsonStyle);
                 }
                 catch (Exception ex)
                 {
@@ -111,12 +245,66 @@ namespace MarkdownMonster
 
                 if (EditorSyntax != "markdown")
                     AceEditor?.setlanguage(EditorSyntax);
-                RestyleEditor(true);
 
+
+                if (EditorSyntax == "markdown" || EditorSyntax == "text")
+                    AceEditor?.enablespellchecking(!mmApp.Configuration.Editor.EnableSpellcheck,
+                        mmApp.Configuration.Editor.Dictionary);
+                else
+                    // always disable for non-markdown text
+                    AceEditor?.enablespellchecking(true, mmApp.Configuration.Editor.Dictionary);
+                
+                
+                if (!NoInitialFocus)
+                    SetEditorFocus();
+
+                if (InitialLineNumber > 0)
+                    GotoLine(InitialLineNumber);
 
                 WebBrowser.Visibility = Visibility.Visible;
             }
-            SetMarkdown();            
+
+            SetMarkdown();
+        }
+
+        /// <summary>
+        /// Attaches the Preview Browser to this editor instance
+        /// </summary>
+        public void AttachPreviewBrowser()
+        {
+            // Remove preview browser from old parent if there is one
+            ((Grid)Window.PreviewBrowserContainer.Parent)?.Children.Remove(Window.PreviewBrowserContainer);
+
+            Window.Model.WindowLayout.IsPreviewVisible = mmApp.Configuration.IsPreviewVisible;
+
+            // add the previewer
+            EditorPreviewPane.ContentGrid.Children.Add(Window.PreviewBrowserContainer);
+
+            // add it to the current editor
+            Window.PreviewBrowserContainer.SetValue(Grid.ColumnProperty, 2);
+        }
+
+        public void RemovePreviewBrowser()
+        {
+        
+            // add it to the current editor
+            //Window.PreviewBrowserContainer.SetValue(Grid.ColumnProperty, 2);
+        }
+
+        /// <summary>
+        /// Releases the Editor and Preview Pane explicitly
+        /// </summary>
+        public void ReleaseEditor()
+        {
+            if (EditorPreviewPane != null)
+            {
+                // add the previewer
+                EditorPreviewPane.ContentGrid.Children.Remove(Window.PreviewBrowserContainer);
+
+                EditorPreviewPane.Release();
+                EditorPreviewPane = null;
+
+            }
         }
 
         #endregion
@@ -124,75 +312,29 @@ namespace MarkdownMonster
         #region Markdown Access and Manipulation
 
         /// <summary>
-        /// Looks up and sets the EditorSyntax based on a file name
-        /// So .cs file gets csharp, .xml get xml etc.        
-        /// </summary>
-        /// <param name="filename"></param>
-        public void FindSyntaxFromFileType(string filename)
-        {
-            if (string.IsNullOrEmpty(filename))
-                return;
-            
-            EditorSyntax = "markdown";
-
-            if (filename.ToLower() == "untitled")
-                return;
-
-            var ext = Path.GetExtension(MarkdownDocument.Filename).ToLower().Replace(".", "");
-            if (ext == "md" || ext == "markdown") { }                
-            else if (ext == "json")
-                EditorSyntax = "json";
-            else if (ext == "html" || ext == "htm")
-                EditorSyntax = "html";
-
-            else if (ext == "xml" || ext == "config" || ext == "xaml" || ext == "csproj")
-                EditorSyntax = "xml";
-            else if (ext == "js")
-                EditorSyntax = "javascript";
-            else if (ext == "ts")
-                EditorSyntax = "typescript";
-            else if (ext == "cs")
-                EditorSyntax = "csharp";
-            else if (ext == "cshtml")
-                EditorSyntax = "razor";
-            else if (ext == "css")
-                EditorSyntax = "css";
-            else if (ext == "prg")
-                EditorSyntax = "foxpro";
-            else if (ext == "txt")
-                EditorSyntax = "text";
-            else if (ext == "php")
-                EditorSyntax = "php";
-            else if (ext == "py")
-                EditorSyntax = "python";
-            else if (ext == "ps1")
-                EditorSyntax = "powershell";
-            else if (ext == "sql")
-                EditorSyntax = "sqlserver";
-            else
-                EditorSyntax = "";
-            
-        }
-
-        /// <summary>
         /// Sets the markdown text into the editor control
         /// </summary>
         /// <param name="markdown"></param>
-        public void SetMarkdown(string markdown = null, object position = null)
+        public void SetMarkdown(string markdown = null, object position = null, bool updateDirtyFlag = false, bool keepUndoBuffer = false)
         {
             if (MarkdownDocument != null)
             {
                 if (string.IsNullOrEmpty(markdown))
                     markdown = MarkdownDocument.CurrentText;
                 else if (markdown != MarkdownDocument.CurrentText)
-                     SetDirty(true);                
+                    SetDirty(true);
             }
+
             if (AceEditor != null)
             {
                 if (position == null)
                     position = -2; // keep position
-                AceEditor.setvalue(markdown, position);
+
+                AceEditor.setvalue(markdown ?? string.Empty, position, keepUndoBuffer);
             }
+
+            if (updateDirtyFlag)
+                IsDirty();
         }
 
         /// <summary>
@@ -204,8 +346,19 @@ namespace MarkdownMonster
             if (AceEditor == null)
                 return "";
 
-            MarkdownDocument.CurrentText =  AceEditor.getvalue(false);
+            MarkdownDocument.CurrentText = AceEditor.getvalue(false);
             return MarkdownDocument.CurrentText;
+        }
+
+        /// <summary>
+        /// Renders Markdown as HTML
+        /// </summary>
+        /// <param name="markdown">Markdown text to turn into HTML</param>
+        /// <param name="renderLinksExternal">If true creates all links with target='top'</param>
+        /// <returns></returns>
+        public string RenderMarkdown(string markdown, bool renderLinksExternal = false, bool usePragmaLines = false)
+        {
+            return MarkdownDocument.RenderHtml(markdown, renderLinksExternal, usePragmaLines);
         }
 
         /// <summary>
@@ -215,14 +368,31 @@ namespace MarkdownMonster
         /// If there's no active filename a file save dialog
         /// If there's no active filename a file save dialog
         /// is popped up. 
-        /// </summary>1
-        public bool SaveDocument()
+        /// </summary>
+        /// <param name="isEncrypted">Determines if the file is using local encryption</param>        
+        public bool SaveDocument(bool isEncrypted = false)
         {
-            if (MarkdownDocument == null || AceEditor == null || 
-               !AddinManager.Current.RaiseOnBeforeSaveDocument(MarkdownDocument))
+            if (MarkdownDocument == null || AceEditor == null ||
+                !AddinManager.Current.RaiseOnBeforeSaveDocument(MarkdownDocument))
                 return false;
-            
+
             GetMarkdown();
+
+            if (isEncrypted && MarkdownDocument.Password == null)
+            {
+                var pwdDialog = new FilePasswordDialog(MarkdownDocument, true)
+                {
+                    Owner = Window
+                };
+                bool? pwdResult = pwdDialog.ShowDialog();
+                if (pwdResult == false)
+                {
+                    Window.ShowStatus("Encrypted document not opened, due to missing password.",
+                        mmApp.Configuration.StatusMessageTimeout);
+                    return false;
+                }
+            }
+
 
             if (!MarkdownDocument.Save())
                 return false;
@@ -237,18 +407,60 @@ namespace MarkdownMonster
             {
                 mmApp.Configuration.Read();
 
-                mmApp.SetTheme(mmApp.Configuration.ApplicationTheme,Window);
+                mmApp.SetTheme(mmApp.Configuration.ApplicationTheme, Window);
                 mmApp.SetThemeWindowOverride(Window);
-                
+
                 foreach (TabItem tab in Window.TabControl.Items)
                 {
                     var editor = tab.Tag as MarkdownDocumentEditor;
+                    if (editor == null) continue;
                     editor.RestyleEditor();
+                    editor.AceEditor?.setShowLineNumbers(mmApp.Configuration.Editor.ShowLineNumbers);
                 }
             }
 
             return true;
         }
+
+        public struct MarkupMarkdownResult
+        {
+            public string Html;
+            public int CursorMovement;
+        }
+
+        /// <summary>
+        /// Wraps a string with beginning and ending delimiters.
+        /// Fixes up accidental leading and trailing spaces.
+        /// </summary>
+        /// <param name="input"></param>
+        /// <param name="delim1"></param>
+        /// <param name="delim2"></param>
+        /// <param name="stripSpaces"></param>
+        /// <returns></returns>
+        public string wrapValue(string input, string delim1, string delim2, bool stripSpaces = true)
+        {
+            if (!stripSpaces)
+                return delim1 + input + delim2;
+
+            if (input.StartsWith(" "))
+                input = " " + delim1 + input.TrimStart();
+            else
+                input = delim1 + input;
+
+            if (input.EndsWith(" "))
+                input = input.TrimEnd() + delim2 + " ";
+            else
+                input += delim2;
+
+            return input;
+        }
+
+        #endregion
+
+
+
+
+        #region Editor Selection Replacements and Insertions
 
         /// <summary>
         /// Takes action on the selected string in the editor using
@@ -258,30 +470,67 @@ namespace MarkdownMonster
         /// <param name="input"></param>
         /// <param name="style"></param>
         /// <returns></returns>
-        public string MarkupMarkdown(string action, string input, string style = null)
+        public MarkupMarkdownResult MarkupMarkdown(string action, string input, string style = null)
         {
+            var result = new MarkupMarkdownResult();
+
             if (string.IsNullOrEmpty(action))
-                return input;
+            {
+                result.Html = input;
+                return result;
+            }
 
             action = action.ToLower();
 
-            if (string.IsNullOrEmpty(input) && !StringUtils.Inlist(action, new string[] { "image", "href", "code" }))
-                return null;
+            // check for insert actions that don't require a pre selection
+            //if (string.IsNullOrEmpty(input) && !StringUtils.Inlist(action,
+            //    new string[] {
+            //        "image", "href", "code", "emoji",
+            //        "h1", "h2", "h3", "h4", "h5",
+
+            //    }))
+            //    return null;
 
             string html = input;
+            int cursorMovement = 0;
 
+            if (action == "softbreak")
+            {
+                html = input + mmApp.Configuration.MarkdownOptions.MarkdownSymbols.SoftReturn  + System.Environment.NewLine;
+            }
             if (action == "bold")
-                html = "**" + input + "**";
+            {
+                html = wrapValue(input, "**", "**", stripSpaces: true);
+                cursorMovement = -2;
+            }
             else if (action == "italic")
-                html = "*" + input + "*";
+            {
+                var italic = mmApp.Configuration.MarkdownOptions.MarkdownSymbols.Italic;
+                html = wrapValue(input, italic, italic, stripSpaces: true);
+                cursorMovement = -1;
+            }
             else if (action == "small")
-                html = "<small>" + input + "</small>";
+            {
+                // :-( no markdown spec for this - use HTML
+                html = wrapValue(input, "<small>", "</small>", stripSpaces: true);
+                cursorMovement = -7;
+            }
             else if (action == "underline")
-                html = "<u>" + input + "</u>";
+            {
+                // :-( no markdown spec for this - use HTML
+                html = wrapValue(input, "<u>", "</u>", stripSpaces: true);
+                cursorMovement = -4;
+            }
             else if (action == "strikethrough")
-                html = "~~" + input + "~~";
+            {
+                html = wrapValue(input, "~~", "~~", stripSpaces: true);
+                cursorMovement = -2;
+            }
             else if (action == "inlinecode")
-                html = "`" + input + "`";
+            {
+                html = wrapValue(input, "`", "`", stripSpaces: true);
+                cursorMovement = -1;
+            }
             else if (action == "h1")
                 html = "# " + input;
             else if (action == "h2")
@@ -292,6 +541,8 @@ namespace MarkdownMonster
                 html = "#### " + input;
             else if (action == "h5")
                 html = "##### " + input;
+            else if (action == "h6")
+                html = "###### " + input;
 
             else if (action == "quote")
             {
@@ -301,7 +552,11 @@ namespace MarkdownMonster
                 {
                     sb.AppendLine("> " + line);
                 }
+
                 html = sb.ToString();
+
+                if (string.IsNullOrEmpty(input))
+                    html = html.TrimEnd() + " "; // strip off LF
             }
             else if (action == "list")
             {
@@ -311,7 +566,11 @@ namespace MarkdownMonster
                 {
                     sb.AppendLine("* " + line);
                 }
+
                 html = sb.ToString();
+
+                if (string.IsNullOrEmpty(input))
+                    html = html.TrimEnd() + " "; // strip off LF
             }
             else if (action == "numberlist")
             {
@@ -323,7 +582,30 @@ namespace MarkdownMonster
                     ct++;
                     sb.AppendLine($"{ct}. " + line);
                 }
+
                 html = sb.ToString();
+
+                if (string.IsNullOrEmpty(input))
+                    html = html.TrimEnd() + " "; // strip off LF
+            }
+            else if (action == "table")
+            {
+                var form = new TableEditor();
+                form.Owner = Window;
+                form.ShowDialog();
+
+                if (!form.Cancelled)
+                    html = form.TableHtml;
+            }
+
+            else if (action == "emoji")
+            {
+                var form = new EmojiWindow();
+                form.Owner = Window;
+                form.ShowDialog();
+
+                if (!form.Cancelled)
+                    html = form.EmojiString;
             }
             else if (action == "href")
             {
@@ -339,8 +621,9 @@ namespace MarkdownMonster
                 if (string.IsNullOrEmpty(link))
                     link = Clipboard.GetText();
 
-                if (!(input.StartsWith("http:") || input.StartsWith("https:") || input.StartsWith("mailto:") || input.StartsWith("ftp:")))                
-                    link = string.Empty;                
+                if (!(input.StartsWith("http:") || input.StartsWith("https:") || input.StartsWith("mailto:") ||
+                      input.StartsWith("ftp:")))
+                    link = string.Empty;
                 form.Link = link;
 
                 bool? res = form.ShowDialog();
@@ -348,15 +631,17 @@ namespace MarkdownMonster
                 {
                     if (form.IsExternal)
                         html = $"<a href=\"{form.Link}\" target=\"_blank\">{form.LinkText}</a>";
+                    else if (form.IsLinkReference)
+                        // this doesn't set Html it directly updates the document
+                        AddLinkReference(form);
                     else
                         html = $"[{form.LinkText}]({form.Link})";
                 }
             }
             else if (action == "image")
             {
-                var form = new PasteImage
+                var form = new PasteImageWindow(Window)
                 {
-                    Owner = Window,
                     ImageText = input,
                     MarkdownFile = MarkdownDocument.Filename
                 };
@@ -367,7 +652,8 @@ namespace MarkdownMonster
                 if (string.IsNullOrEmpty(link))
                     link = Clipboard.GetText();
 
-                if (!(input.StartsWith("http:") || input.StartsWith("https:") || input.StartsWith("mailto:") || input.StartsWith("ftp:")))
+                if (!(input.StartsWith("http:") || input.StartsWith("https:") || input.StartsWith("mailto:") ||
+                      input.StartsWith("ftp:")))
                     link = string.Empty;
 
                 if (input.Contains(".png") || input.Contains(".jpg") || input.Contains(".gif"))
@@ -376,28 +662,65 @@ namespace MarkdownMonster
                 form.Image = link;
 
                 bool? res = form.ShowDialog();
-                if (res != null && res.Value)
+                if (res != null && res.Value && form.Image != null)
                 {
                     var image = form.Image;
-                    html = $"![{form.ImageText}]({form.Image})";
+                    if (!image.StartsWith("data:image/"))
+                        html = $"![{form.ImageText}]({image.Replace(" ", "%20")})";
+                    else
+                    {
+                        var id = "image_ref_" + DataUtils.GenerateUniqueId();
+
+                        dynamic pos = AceEditor.getCursorPosition(false);
+                        dynamic scroll = AceEditor.getscrolltop(false);
+
+                        // the ID tag
+                        html = $"\r\n\r\n[{id}]: {image}\r\n";
+
+                        // set selction position to bottom of document
+                        AceEditor.gotoBottom(false);
+                        SetSelection(html);
+
+                        // reset the selection point
+                        AceEditor.setcursorposition(pos); //pos.column,pos.row);
+
+                        if (scroll != null)
+                            AceEditor.setscrolltop(scroll);
+
+                        WindowUtilities.DoEvents();
+                        html = $"![{form.ImageText}][{id}]";
+
+                        // Force a refresh of the window
+                        Window.PreviewBrowser.Refresh(true);
+                    }
                 }
             }
             else if (action == "code")
             {
-
                 var form = new PasteCode();
                 form.Owner = Window;
-                form.Code = input;
-                form.CodeLanguage = "csharp";
+                if (!string.IsNullOrEmpty(input))
+                    form.Code = input;
+                else
+                {
+                    // use clipboard text if we think it contains code
+                    string clipText = Clipboard.GetText(TextDataFormat.Text);
+                    if (!string.IsNullOrEmpty(clipText) &&
+                        clipText.Contains("{") ||
+                        clipText.Contains("/>") ||
+                        clipText.Contains("="))
+                        form.Code = clipText;
+                }
+
+                form.CodeLanguage = mmApp.Configuration.DefaultCodeSyntax;
                 bool? res = form.ShowDialog();
 
-                if (res != null && res.Value)
+                if (res != null && res.Value && !string.IsNullOrEmpty(form.Code))
                 {
                     html = "```" + form.CodeLanguage + "\r\n" +
                            form.Code.Trim() + "\r\n" +
                            "```\r\n";
                 }
-
             }
             else
             {
@@ -407,9 +730,461 @@ namespace MarkdownMonster
                     html = addinAction;
             }
 
-            return html;
+
+            if (string.IsNullOrEmpty(input))
+                result.CursorMovement = cursorMovement;
+            result.Html = html;
+
+            return result;
         }
 
+        private void AddLinkReference(PasteHref form)
+        {
+            var origRange = GetSelectionRange();
+
+            LinkReferenceResult markdownResult = null;
+            try
+            {
+                markdownResult = MarkdownUtilities.AddLinkReference(MarkdownDocument.CurrentText, origRange, form.Link);
+            }
+            catch (Exception ex)
+            {
+                Window.ShowStatusError("Couldn't insert link: " + ex.Message);
+                return;
+            }
+
+            SetMarkdown(markdownResult.Markdown, keepUndoBuffer: true, updateDirtyFlag: true);
+            SetCursorPosition(new AcePosition
+                {row = origRange.StartRow + 1, column = origRange.StartColumn + markdownResult.SelectionLength});
+            //IsDirty();
+
+            // Force a refresh of the window
+            Window.PreviewBrowser.Refresh(true);
+        }
+
+
+        /// <summary>
+        /// Takes a command  like bold,italic,href etc., reads the
+        /// text from editor selection, transforms it and pastes
+        /// it back into the document.
+        /// </summary>
+        /// <param name="action"></param>
+        public void ProcessEditorUpdateCommand(string action)
+        {
+            if (AceEditor == null)
+                return;
+
+            string html = AceEditor.getselection(false);
+
+            var result = MarkupMarkdown(action, html);
+
+
+            if (!string.IsNullOrEmpty(result.Html) && html != result.Html)
+                SetSelectionAndFocus(result.Html);
+            else
+                SetEditorFocus();
+
+            if (result.CursorMovement != 0)
+                MoveCursorPosition(result.CursorMovement);
+        }
+
+        /// <summary>
+        /// Fired from Editor Menu when items are selected
+        /// </summary>
+        /// <param name="action"></param>
+        /// <param name="text"></param>
+        /// <returns></returns>
+        public string EditorSelectionOperation(string action, string text)
+        {
+            if (action == "image")
+            {
+                string label = StringUtils.ExtractString(text, "![", "]");
+                string link = StringUtils.ExtractString(text, "](", ")");
+
+                var form = new PasteImageWindow(Window)
+                {
+                    Image = link,
+                    ImageText = label,
+                    MarkdownFile = MarkdownDocument.Filename
+                };
+                form.SetImagePreview();
+
+                bool? res = form.ShowDialog();
+                string html = null;
+
+                if (res != null && res.Value)
+                {
+                    var image = form.Image;
+                    if (!image.StartsWith("data:image/"))
+                        html = $"![{form.ImageText}]({image.Replace(" ", "%20")})";
+                    else
+                    {
+                        var id = "image_ref_" + DataUtils.GenerateUniqueId();
+
+                        dynamic pos = AceEditor.getCursorPosition(false);
+                        dynamic scroll = AceEditor.getscrolltop(false);
+
+                        // the ID tag
+                        html = $"\r\n\r\n[{id}]: {image}\r\n";
+
+                        // set selction position to bottom of document
+                        AceEditor.gotoBottom(false);
+                        SetSelection(html);
+
+                        // reset the selection point
+                        AceEditor.setcursorposition(pos); //pos.column,pos.row);
+
+                        if (scroll != null)
+                            AceEditor.setscrolltop(scroll);
+
+                        WindowUtilities.DoEvents();
+                        html = $"![{form.ImageText}][{id}]";
+                    }
+
+                    if (!string.IsNullOrEmpty(html))
+                    {
+                        SetSelection(html);
+                        PreviewMarkdownCallback();
+
+                        // Force the browser to refresh so the image gets updated.
+                        Window.PreviewBrowser.Refresh(true);
+                    }
+
+                }
+            }
+            else if (action == "hyperlink")
+            {
+                string label = StringUtils.ExtractString(text, "[", "]");
+                string link = StringUtils.ExtractString(text, "](", ")");
+
+                var form = new PasteHref()
+                {
+                    Owner = Window,
+                    Link = link,
+                    LinkText = label,
+                    MarkdownFile = MarkdownDocument.Filename
+                };
+
+                bool? res = form.ShowDialog();
+                if (res != null && res.Value)
+                {
+                    string html = $"[{form.LinkText}]({form.Link})";
+                    if (!string.IsNullOrEmpty(html))
+                    {
+                        SetSelectionAndFocus(html);
+                        PreviewMarkdownCallback();
+                    }
+                }
+
+            }
+            else if (action == "table")
+            {
+                var form = new TableEditor(text);
+                var res = form.ShowDialog();
+
+                if (res != null && res.Value)
+                {
+                    if (!string.IsNullOrEmpty(form.TableHtml))
+                    {
+                        SetSelectionAndFocus(form.TableHtml.TrimEnd() + "\r\n");
+                        PreviewMarkdownCallback();
+                    }
+                }
+            }
+            else if (action == "code")
+            {
+                MessageBox.Show("Code Pasting is not implemented yet.", text);
+            }
+
+            return null;
+        }
+
+        public void ExecEditorCommand(string action, object parm = null)
+        {
+            if (action == null)
+                return;
+
+            AceEditor?.execcommand(action, parm);
+        }
+
+        #endregion
+
+
+        #region Get and Set Document Properties
+
+        public bool IsPreviewToEditorSync()
+        {
+            var mode = mmApp.Configuration.PreviewSyncMode;
+            if (mode == PreviewSyncMode.PreviewToEditor || mode == PreviewSyncMode.EditorAndPreview)
+                return true;
+
+            return false;
+        }
+
+
+        /// <summary>
+        /// Sets the Syntax language to highlight for in the editor
+        /// </summary>
+        /// <param name="syntax"></param>
+        public void SetEditorSyntax(string syntax = "markdown")
+        {
+            AceEditor?.setlanguage(syntax);
+        }
+
+
+        /// <summary>
+        /// Returns the font size of the editor. Note font-size automatically
+        /// affects all open editor instances .
+        /// </summary>
+        /// <returns></returns>        
+        public int GetFontSize()
+        {
+            if (AceEditor == null)
+                return 0;
+
+            object fontsize = AceEditor.getfontsize(false);
+            if (fontsize == null || !(fontsize is double || fontsize is int))
+                return 0;
+
+            return Convert.ToInt32(fontsize);
+
+            //// If we have a fontsize, force the zoom level to 100% 
+            //// The font-size has been adjusted to reflect the zoom percentage
+            //var wb = (dynamic)WebBrowser.GetType().GetField("_axIWebBrowser2",
+            //        BindingFlags.Instance | BindingFlags.NonPublic)
+            //    .GetValue(WebBrowser);
+            //int zoomLevel = 100; // Between 10 and 1000
+            //wb.ExecWB(63, 2, zoomLevel, ref zoomLevel);   // OLECMDID_OPTICAL_ZOOM (63) - don't prompt (2)                     
+        }
+
+
+        /// <summary>
+        /// Restyles the current editor with configuration settings
+        /// from the mmApp.Configuration object (or Model.Configuration
+        /// from an addin).
+        /// </summary>
+        /// <param name="forceSync">Forces higher priority on this operation - use when editor initializes at first</param>
+        public void RestyleEditor(bool forceSync = false, bool initialize = false)
+        {
+            if (AceEditor == null)
+                return;
+
+            Window.Dispatcher.InvokeAsync(() =>
+                {
+                    try
+                    {
+                        var jsonStyle = GetJsonStyleInfo();
+                        AceEditor.setEditorStyle(jsonStyle);
+
+                        if (EditorSyntax == "markdown" || EditorSyntax == "text")
+                            AceEditor.enablespellchecking(!mmApp.Configuration.Editor.EnableSpellcheck,
+                                mmApp.Configuration.Editor.Dictionary);
+                        else
+                            // always disable for non-markdown text
+                            AceEditor.enablespellchecking(true, mmApp.Configuration.Editor.Dictionary);
+                    }
+                    catch
+                    {
+                    }
+                },
+                forceSync
+                    ? System.Windows.Threading.DispatcherPriority.Send
+                    : System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
+
+        string GetJsonStyleInfo()
+        {
+            // determine if we want to rescale the editor fontsize
+            // based on DPI Screen Size
+            decimal dpiRatio = 1;
+            try
+            {
+                dpiRatio = WindowUtilities.GetDpiRatio(Window);
+            }
+            catch
+            {
+            }
+
+            var fontSize = mmApp.Configuration.Editor.FontSize *
+                           ((decimal)mmApp.Configuration.Editor.ZoomLevel / 100) * dpiRatio;
+
+            var config = mmApp.Configuration;
+
+            // CenteredModeMaxWidth is rendered based on Centered Mode only            
+            int maxWidth = config.Editor.CenteredModeMaxWidth;
+            if (!config.Editor.CenteredMode)
+                maxWidth = 0;  // 0 means stretch full width
+
+            var style = new
+            {
+                Theme = config.EditorTheme,
+                config.Editor.Font,
+                FontSize = (int)fontSize,
+                config.Editor.LineHeight,
+                MaxWidth = maxWidth,
+                config.Editor.Padding,
+                config.Editor.HighlightActiveLine,
+                config.Editor.WrapText,
+                config.Editor.ShowLineNumbers,
+                config.Editor.ShowInvisibles,
+                config.Editor.ShowPrintMargin,
+                config.Editor.PrintMargin,
+                config.Editor.WrapMargin,
+                config.Editor.KeyboardHandler,
+                config.Editor.EnableBulletAutoCompletion,
+                config.Editor.TabSize,
+                config.Editor.UseSoftTabs,
+                config.Editor.RightToLeft                
+            };
+
+            var settings = new JsonSerializerSettings()
+            {
+                ContractResolver = new CamelCasePropertyNamesContractResolver(),                                
+            };
+            return JsonConvert.SerializeObject(style,settings);
+        }
+
+        /// <summary>
+        /// Sets line number gutter on and off. Separated out from Restyle Editor to 
+        /// allow line number config to be set separately from main editor settings
+        /// for specialty file editing.
+        /// </summary>
+        /// <param name="show"></param>
+        public void SetShowLineNumbers(bool? show = null)
+        {
+            if (show == null)
+                show = mmApp.Configuration.Editor.ShowLineNumbers;
+
+            AceEditor?.setShowLineNumbers(show.Value);
+        }
+
+        /// <summary>
+        /// Enables or disables the display of invisible characters.
+        /// </summary>
+        /// <param name="show"></param>
+        public void SetShowInvisibles(bool? show = null)
+        {
+            if (show == null)
+                show = mmApp.Configuration.Editor.ShowInvisibles;
+
+            AceEditor?.setShowInvisibles(show.Value);
+        }
+
+        /// <summary>
+        /// Makes the document readonly or read-write
+        /// 
+        /// Fires event when ReadOnly document is double clicked:
+        /// OnNotifyAddin("ReadOnlyEditorDoubleClick",editor) 
+        /// </summary>
+        /// <param name="show"></param>
+        public void SetReadOnly(bool show = true)
+        {
+            AceEditor?.setReadOnly(show);
+        }
+
+        /// <summary>
+        /// Enables or disables Wordwrap
+        /// </summary>
+        /// <param name="enable"></param>
+        public void SetWordWrap(bool enable)
+        {
+            AceEditor?.setWordWrap(enable);
+        }
+
+        #endregion
+
+        #region Properties Collection Helpers
+
+
+        /// <summary>
+        /// Returns a value from the Properties Collection as a sepcific type
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="key"></param>
+        public T GetProperty<T>(string key)
+        {
+            if (Properties.TryGetValue(key, out object obj))
+                return (T) obj;
+
+            return default(T);
+        }
+
+        /// <summary>
+        /// Returns a value from the Properties Collection as a sepcific type
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="key"></param>
+        /// <param name="defaultValue"></param>
+        /// <returns></returns>
+        public T GetProperty<T>(string key, T defaultValue)
+        {
+            if (Properties.TryGetValue(key, out object obj))
+                return (T) obj;
+
+            return defaultValue;
+        }
+
+
+        /// <summary>
+        /// Returns a Property from the Properties collection as a string
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="defaultValue"></param>
+        /// <returns></returns>
+        public string GetPropertyString(string key, string defaultValue = null)
+        {
+            if (Properties.TryGetValue(key, out object obj))
+                return obj as string;
+
+            return defaultValue;
+        }
+
+        #endregion
+
+        #region Selection and Line Operations
+
+        /// <summary>
+        /// Replaces the editor's content without completely 
+        /// reloading the document. 
+        /// 
+        /// Leaves scroll position intact.
+        /// </summary>
+        /// <param name="text"></param>
+        public void ReplaceContent(string text)
+        {
+            AceEditor?.replacecontent(text);
+        }
+
+
+        /// <summary>
+        /// Gets the current selection of the editor
+        /// </summary>
+        /// <returns></returns>
+        public string GetSelection()
+        {
+            return AceEditor?.getselection(false);
+        }
+
+     
+        /// <summary>
+        /// Returns an object that holds the current selection's
+        /// start and end position row and column values.
+        /// </summary>
+        /// <returns>SelectionRange object or null if no selection is active</returns>
+        public SelectionRange GetSelectionRange()
+        {
+            dynamic range = AceEditor?.getselectionrange(false);
+            if (range == null)
+                return null;
+
+            return new SelectionRange
+            {
+                StartRow = (int) range.startRow,
+                EndRow = (int) range.endRow,
+                StartColumn = (int) range.startColumn,
+                EndColumn = (int) range.endColumn
+            };
+        }
 
         /// <summary>
         /// Pastes text into the editor at the current 
@@ -422,7 +1197,8 @@ namespace MarkdownMonster
             if (AceEditor == null)
                 return;
 
-            AceEditor.setselection(text);                        
+            AceEditor.setselection(text);
+            IsDirty();
             MarkdownDocument.CurrentText = GetMarkdown();
         }
 
@@ -438,64 +1214,77 @@ namespace MarkdownMonster
 
             SetSelection(text);
             SetEditorFocus();
+
             Window.PreviewMarkdown(this, keepScrollPosition: true);
         }
 
-        public int GetFontSize()
+
+        /// <summary>
+        /// Retrieves the text of the current line as a string.
+        /// </summary>
+        /// <returns></returns>
+        public string GetCurrentLine()
         {
-            if (AceEditor == null)
-                return 0;
-
-            object fontsize = AceEditor.getfontsize(false);
-            if (fontsize == null || !(fontsize is double || fontsize is int) )
-                return 0;
-
-            // If we have a fontsize, force the zoom level to 100% 
-            // The font-size has been adjusted to reflect the zoom percentage
-            var wb = (dynamic)WebBrowser.GetType().GetField("_axIWebBrowser2",
-                      BindingFlags.Instance | BindingFlags.NonPublic)
-                      .GetValue(WebBrowser);
-            int zoomLevel = 100; // Between 10 and 1000
-            wb.ExecWB(63, 2, zoomLevel, ref zoomLevel);   // OLECMDID_OPTICAL_ZOOM (63) - don't prompt (2)
-            
-            return Convert.ToInt32(fontsize);
+            return AceEditor?.getCurrentLine(false);
         }
 
         /// <summary>
-        /// Gets the current selection of the editor
+        /// Retrieves the text for the given line
         /// </summary>
+        /// <param name="rowNumber"></param>
         /// <returns></returns>
-        public string GetSelection()
-        {            
-            return AceEditor?.getselection(false);            
+        public string GetLine(int rowNumber)
+        {
+            try
+            {
+                return AceEditor?.getLine(rowNumber);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
+
+        /// <summary>
+        /// Gets the active line number of the editor
+        /// </summary>
+        /// <returns></returns>
         public int GetLineNumber()
         {
             if (AceEditor == null)
                 return -1;
-            
-            int lineNo = AceEditor.getLineNumber(false);
-            return lineNo;
+
+            try
+            {
+                int lineNo = AceEditor.getLineNumber(false);
+                return lineNo;
+            }
+            catch
+            {
+                return -1;
+            }
         }
 
-        public string GetCurrentLine()
-        {
-            if (AceEditor == null)
-                return null;
-            return AceEditor.getCurrentLine(false);
-        }
 
-        public void GotoLine(int line)
+        /// <summary>
+        /// Goes to the specified line number in the editor
+        /// </summary>
+        /// <param name="line">Editor Line to display</param>
+        /// <param name="noRefresh">Won't refresh the preview after setting</param>
+        /// <param name="noSelection">Only scroll but don't select</param>
+        public void GotoLine(int line, bool noRefresh = false, bool noSelection = false)
         {
-            if (AceEditor == null)
-                return;            
-            AceEditor.gotoLine(line);
-        }
+            if (line < 0)
+                line = 0;
 
-        public void FindAndReplaceText(string search, string replace)
-        {
-            AceEditor?.findAndReplaceText(search, replace);
+            try
+            {
+                AceEditor?.gotoLine(line, noRefresh, noSelection);
+            }
+            catch
+            {
+            }
         }
 
         public void FindAndReplaceTextInCurrentLine(string search, string replace)
@@ -503,117 +1292,244 @@ namespace MarkdownMonster
             AceEditor?.findAndReplaceTextInCurrentLine(search, replace);
         }
 
-        public bool IsPreviewToEditorSync()
-        {
-            var mode = mmApp.Configuration.PreviewSyncMode;
-            if (mode == PreviewSyncMode.PreviewToEditor || mode == PreviewSyncMode.EditorAndPreview)
-                return true;
 
-            return false;
+        /// <summary>
+        /// REturns the editor's cursor position as row and column values
+        /// </summary>
+        /// <returns></returns>
+        public AcePosition GetCursorPosition()
+        {
+            dynamic pos = AceEditor.getCursorPosition(false);
+            if (pos == null)
+                return new AcePosition {row = -1, column = -1};
+            var pt = new AcePosition()
+            {
+                row = (int) pos.row,
+                column = (int) pos.column
+            };
+            return pt;
         }
+
+
+        /// <summary>
+        /// Set's the editor's row and column position
+        /// </summary>
+        /// <param name="col"></param>
+        /// <param name="row"></param>
+        /// <returns></returns>
+        public void SetCursorPosition(int col, int row)
+        {
+            AceEditor?.setCursorPosition(row, col);
+        }
+
+        /// <summary>
+        /// Set's the editor's row and column position
+        /// </summary>
+        public void SetCursorPosition(AcePosition pos)
+        {
+            AceEditor?.setCursorPosition(pos.row, pos.column);
+        }
+
+        public void MoveCursorPosition(int column, int row = 0)
+        {
+            if (column > 0)
+                AceEditor.moveCursorRight(column);
+            else if (column < 0)
+                AceEditor.moveCursorLeft(column * -1);
+        }
+
+        public void SetSelectionRange(AcePosition start, AcePosition end)
+        {
+            AceEditor?.SetSelectionRange(start.row, start.column, end.row, end.column);
+        }
+
+        public void SetSelectionRange(int startRow, int startColumn, int endRow, int endColumn)
+        {
+            AceEditor?.SetSelectionRange(startRow, startColumn, endRow, endColumn);
+        }
+
+        /// <summary>
+        /// Returns the editor's vertical scroll position
+        /// </summary>
+        /// <returns></returns>
+        public int GetScrollPosition()
+        {
+            if (AceEditor == null)
+                return -1;
+
+            try
+            {
+                object st = AceEditor.getscrolltop(false);
+                int scrollTop = (int) st;
+                return scrollTop;
+            }
+            catch
+            {
+                return -1;
+            }
+
+        }
+
+        /// <summary>
+        ///  Sets the vertical scroll position of the document
+        /// </summary>
+        /// <param name="top"></param>
+        public void SetScrollPosition(int top)
+        {
+            if (AceEditor == null)
+                return;
+
+            try
+            {
+                AceEditor.setscrolltop(top);
+            }
+            catch
+            {
+            }
+        }
+
+
+        /// <summary>
+        /// Removes markdown formatting from the editor selection.
+        /// Non-markdown files don't do anything.
+        /// </summary>
+        public bool RemoveMarkdownFormatting()
+        {
+            if (EditorSyntax != "markdown")
+                return false;
+
+            var markdown = GetSelection();
+
+            if (string.IsNullOrEmpty(markdown))
+                return false;
+
+            var text = Markdown.ToPlainText(markdown);
+            SetSelectionAndFocus(text);
+
+            return true;
+        }
+
+
+        /// <summary>
+        /// Splits the editor below, beside or no splitting
+        /// </summary>
+        /// <param name="mode"></param>
+        public void SplitEditor(EditorSplitModes mode)
+        {            
+            AceEditor?.split(mode.ToString());
+        }
+
+        #endregion
+
+        #region Editor Focus and Sizing
 
         /// <summary>
         /// Focuses the Markdown editor in the Window
         /// </summary>
         public void SetEditorFocus()
-        {            
-            AceEditor?.setfocus(true);
+        {
+            try
+            {
+                AceEditor?.setfocus(true);
+            }
+            catch (Exception ex)
+            {
+                mmApp.Log("Handled: AceEditor.setfocus() failed", ex);
+            }
         }
 
 
         /// <summary>
-        /// Renders Markdown as HTML
+        /// Force focus away from the Markdown Editor by focusing
+        /// on one of the controls in the Window
         /// </summary>
-        /// <param name="markdown">Markdown text to turn into HTML</param>
-        /// <param name="renderLinksExternal">If true creates all links with target='top'</param>
-        /// <returns></returns>
-        public string RenderMarkdown(string markdown, bool renderLinksExternal = false, bool usePragmaLines = false)
+        public void SetMarkdownMonsterWindowFocus()
         {
-            return MarkdownDocument.RenderHtml(markdown, renderLinksExternal, usePragmaLines);
+            Window.ComboBoxPreviewSyncModes.Focus();
         }
 
-        /// <summary>
-        /// Takes a command  like bold,italic,href etc., reads the
-        /// text from editor selection, transforms it and pastes
-        /// it back into the document.
-        /// </summary>
-        /// <param name="action"></param>
-        public void ProcessEditorUpdateCommand(string action)
+        public void ResizeWindow()
         {
-            if (AceEditor == null)
-                return;
-
-            string html = AceEditor.getselection(false);
-            
-            string newhtml = MarkupMarkdown(action, html);
-
-            if (!string.IsNullOrEmpty(newhtml) && newhtml != html)            
-                SetSelectionAndFocus(newhtml);                            
+            // nothing to do at the moment             
         }
 
-        /// <summary>
-        /// Sets the Syntax language to highlight for in the editor
-        /// </summary>
-        /// <param name="syntax"></param>
-        public void SetEditorSyntax(string syntax = "markdown")
-        {
-            AceEditor?.setlanguage(syntax);
-        }
-
-        /// <summary>
-        /// Restyles the current editor with configuration settings
-        /// from the mmApp.Configuration object (or Model.Configuration
-        /// from an addin).
-        /// </summary>
-        /// <param name="forceSync">Forces higher priority on this operation - use when editor initializes at first</param>
-        public void RestyleEditor(bool forceSync = false)
-        {
-            if (AceEditor == null)
-                return;
-
-            Window.Dispatcher.InvokeAsync(() =>
-                {
-                    try
-                    {
-                        // determine if we want to rescale the editor fontsize
-                        // based on DPI Screen Size
-                        decimal dpiRatio = 1;
-                        try
-                        {
-                            dpiRatio = WindowUtilities.GetDpiRatio(Window);
-                        }
-                        catch
-                        {
-                        }
-
-                        AceEditor.settheme(
-                            mmApp.Configuration.EditorTheme,
-                            mmApp.Configuration.EditorFont,
-                            mmApp.Configuration.EditorFontSize * dpiRatio,
-                            mmApp.Configuration.EditorWrapText,
-                            mmApp.Configuration.EditorHighlightActiveLine,
-                            mmApp.Configuration.EditorShowLineNumbers,
-                            mmApp.Configuration.EditorKeyboardHandler);
-
-                        if (EditorSyntax == "markdown" || this.EditorSyntax == "text")
-                            AceEditor.enablespellchecking(!mmApp.Configuration.EditorEnableSpellcheck,
-                                mmApp.Configuration.EditorDictionary);
-                        else
-                            // always disable for non-markdown text
-                            AceEditor.enablespellchecking(true, mmApp.Configuration.EditorDictionary);
-                    }
-                    catch
-                    {
-                    }
-                },
-                forceSync
-                    ? System.Windows.Threading.DispatcherPriority.Send
-                    : System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-        }
         #endregion
 
         #region Callback functions from the Html Editor
 
+        /// <summary>
+        /// Callback handler callable from JavaScript editor
+        /// </summary>
+        public void PreviewMarkdownCallback(bool dontGetMarkdown = false, int editorLineNumber = -1)
+        {
+            if (EditorSyntax != "markdown" && EditorSyntax != "html")
+                return;
+
+            if (!dontGetMarkdown)
+                GetMarkdown();
+
+            //Debug.WriteLine(DateTime.Now.ToString("HH:mm:ss.ms") + "  - Preview Markdown  called");
+            
+            Window.PreviewBrowser.PreviewMarkdownAsync(keepScrollPosition: true, editorLineNumber: editorLineNumber);
+
+            var isDocumentOutlineActive = Window.SidebarContainer?.SelectedItem == Window.TabDocumentOutline;
+            if (isDocumentOutlineActive)
+                Window.UpdateDocumentOutline(editorLineNumber);
+
+            //Debug.WriteLine(DateTime.Now.ToString("HH:mm:ss.ms") +  " - No Preview Markdown  retrieve MD: " + dontGetMarkdown + " DocOutline Rendered: " +
+            //               isDocumentOutlineActive);
+        }
+
+        /// <summary>
+        /// ACE Editor Notification when focus is lost
+        /// </summary>
+        public void LostFocus()
+        {
+            Window.Model.IsEditorFocused = false;
+        }
+
+        /// <summary>
+        /// ACE Editor Notification when focus is set to the editor
+        /// </summary>
+        public void GotFocus()
+        {
+            Window.Model.IsEditorFocused = true;
+        }
+
+        /// <summary>
+        /// Callback to force updating of the status bar document stats
+        /// </summary>
+        /// <param name="stats"></param>
+        public void UpdateDocumentStats(dynamic stats)
+        {
+            if (stats == null)
+            {
+                Window.StatusStats.Text = "";
+                return;
+            }
+
+            int words = Convert.ToInt32(stats.wordCount);
+            int lines = Convert.ToInt32(stats.lines);
+            int chars = Convert.ToInt32(stats.characters);
+
+            Window.StatusStats.Text = $"{words:n0} words   {lines:n0} lines   {chars:n0} chars";
+
+            string enc = string.Empty;
+            bool hasBom = true;
+            if (MarkdownDocument.Encoding.WebName == "utf-8")
+                hasBom = (bool) ReflectionUtils.GetField(MarkdownDocument.Encoding, "emitUtf8Identifier");
+
+            if (hasBom)
+            {
+                enc = MarkdownDocument.Encoding.EncodingName;
+                if (MarkdownDocument.Encoding == Encoding.UTF8)
+                    enc = "UTF-8";
+            }
+            else
+                enc = "UTF-8 (no BOM)";
+
+            Window.StatusEncoding.Text = enc;
+        }
 
         /// <summary>
         /// Sets the Markdown Document as having changes
@@ -621,7 +1537,10 @@ namespace MarkdownMonster
         /// <param name="value">ignored</param>
         public bool SetDirty(bool value)
         {
-             GetMarkdown();
+            GetMarkdown();
+
+            if (IsReadOnly)
+                return false;
 
             if (value && MarkdownDocument.CurrentText != MarkdownDocument.OriginalText)
                 MarkdownDocument.IsDirty = true;
@@ -639,10 +1558,22 @@ namespace MarkdownMonster
         public bool IsDirty()
         {
             GetMarkdown();
+
+            if (IsReadOnly)
+                return false;
+
             MarkdownDocument.IsDirty = MarkdownDocument.CurrentText != MarkdownDocument.OriginalText;
 
             if (MarkdownDocument.IsDirty)
+            {
                 AddinManager.Current.RaiseOnDocumentChanged();
+                if (IsPreview)
+                {
+                    // flip to regular tab from preview Tab
+                    IsPreview = false;
+                    Window.PreviewTab = null;
+                }
+            }
 
             return MarkdownDocument.IsDirty;
         }
@@ -664,7 +1595,7 @@ namespace MarkdownMonster
             var btn = MessageBoxButton.OK;
             Enum.TryParse<MessageBoxButton>(buttons, out btn);
 
-            var res = MessageBox.Show(text, title, btn, image);
+            var res = MessageBox.Show(Window, text, title, btn, image);
             return res.ToString();
         }
 
@@ -677,51 +1608,7 @@ namespace MarkdownMonster
         {
             Window.ShowStatus(text, timeoutms);
         }
-        
 
-        /// <summary>
-        /// Callback handler callable from JavaScript editor
-        /// </summary>
-        public void PreviewMarkdownCallback()
-        {
-            GetMarkdown();                        
-            Window.PreviewMarkdownAsync(keepScrollPosition: true);
-        }
-
-        /// <summary>
-        /// Callback to force updating of the status bar document stats
-        /// </summary>
-        /// <param name="stats"></param>
-        public void UpdateDocumentStats(dynamic stats)
-        {
-            if (stats == null)
-            {
-                Window.StatusStats.Text = "";
-                return;
-            }
-
-            int words = Convert.ToInt32(stats.wordCount);
-            int lines = Convert.ToInt32(stats.lines);
-
-            Window.StatusStats.Text = $"{words:n0} words, {lines:n0} lines";
-            
-            string enc = string.Empty;
-            bool hasBom = true;
-            if (MarkdownDocument.Encoding.WebName == "utf-8")
-                hasBom = (bool)ReflectionUtils.GetField(MarkdownDocument.Encoding, "emitUtf8Identifier");
-
-            if (hasBom)
-            {
-                enc = MarkdownDocument.Encoding.EncodingName;
-                if (MarkdownDocument.Encoding == Encoding.UTF8)
-                    enc = "UTF-8";
-            }
-            else
-                enc = "UTF-8 (no BOM)";
-
-            Window.StatusEncoding.Text = enc;
-
-        }
 
         /// <summary>
         /// Performs the special key operation that is tied
@@ -730,96 +1617,234 @@ namespace MarkdownMonster
         /// ctrl-s,ctrl-n, ctrl-o, cltr-i,ctrl-b,ctrl-l,ctrl-k,alt-c,ctrl-shift-v,ctrl-shift-c,ctlr-shift-down,ctrl-shift-up
         /// </summary>
         /// <param name="key"></param>
-        public void SpecialKey(string key)
+        public void KeyboardCommand(string key)
         {
 
-            // run this one sync to avoid Browser default Open File popup!
-            if (key == "ctrl-o")
+            // run this one sync immediately to avoid Browser default Open File popup!
+            if (key == "OpenDocument")
             {
-                Window.Model.OpenDocumentCommand.Execute(Window);
+                Window.Model.Commands.OpenDocumentCommand.Execute(Window);
                 return;
             }
 
             // invoke out of sync in order to force out of scope of the editor - affects weird key behavior otherwise
             Window.Dispatcher.InvokeAsync(() =>
             {
-                if (key == "ctrl-s")
+                if (key == "SaveDocument")
                 {
-                    Window.Model.SaveCommand.Execute(Window);
+                    Window.Model.Commands.SaveCommand.Execute(Window);
                 }
-                else if (key == "ctrl-n")
+                else if (key == "NewDocument")
                 {
-                    Window.Model.NewDocumentCommand.Execute(Window);
+                    Window.Model.Commands.NewDocumentCommand.Execute(Window);
+                }
+
+                else if (key == "PrintPreview")
+                {
+                    Window.Model.Commands.PrintPreviewCommand.Execute(Window.ButtonPrintPreview);
+                }
+                else if (key == "InsertSoftbreak")
+                    Window.Model.Commands.ToolbarInsertMarkdownCommand.Execute("softbreak");
+                else if (key == "InsertBold")
+                {
+                    Window.Model.Commands.ToolbarInsertMarkdownCommand.Execute("bold");
                 }
                 
-                else if (key == "ctrl-p")
+                else if (key == "InsertItalic")
                 {
-                    Window.Model.PrintPreviewCommand.Execute(Window.ButtonPrintPreview);
-                }                
-                else if (key == "ctrl-b")
-                {
-                    Window.Model.ToolbarInsertMarkdownCommand.Execute("bold");
+                    Window.Model.Commands.ToolbarInsertMarkdownCommand.Execute("italic");
                 }
-                else if (key == "ctrl-i")
+                else if (key == "InsertInlineCode")
                 {
-                    Window.Model.ToolbarInsertMarkdownCommand.Execute("italic");
+                    Window.Model.Commands.ToolbarInsertMarkdownCommand.Execute("inlinecode");
                 }
-                else if (key == "ctrl-`")
+                else if (key == "InsertList")
                 {
-                    Window.Model.ToolbarInsertMarkdownCommand.Execute("inlinecode");
+                    Window.Model.Commands.ToolbarInsertMarkdownCommand.Execute("list");
                 }
-                else if (key == "ctrl-l")
+                else if (key == "InsertEmoji")
                 {
-                    Window.Model.ToolbarInsertMarkdownCommand.Execute("list");
+                    Window.Model.Commands.ToolbarInsertMarkdownCommand.Execute("emoji");
                 }
-                if (key == "ctrl-k")
+                else if (key == "InsertHyperlink")
                 {
-                    Window.Model.ToolbarInsertMarkdownCommand.Execute("href");
+                    Window.Model.Commands.ToolbarInsertMarkdownCommand.Execute("href");
                 }
-                else if (key == "alt-i")
+                else if (key == "InsertImage")
                 {
-                    Window.Model.ToolbarInsertMarkdownCommand.Execute("image");
+                    Window.Model.Commands.ToolbarInsertMarkdownCommand.Execute("image");
                 }
-                if (key == "alt-c")
+                else if (key == "InsertCodeblock")
                 {
-                    Window.Model.ToolbarInsertMarkdownCommand.Execute("code");
+                    Window.Model.Commands.ToolbarInsertMarkdownCommand.Execute("code");
                 }
-                if (key == "ctrl-shift-v")
+                else if (key == "PasteHtmlAsMarkdown")
                 {
-                    Window.Button_PasteMarkdownFromHtml(WebBrowser, null);
+                    Window.Model.Commands.PasteMarkdownFromHtmlCommand.Execute(null);
                 }
-                if (key == "ctrl-shift-c")
+                else if (key == "CopyMarkdownAsHtml")
                 {
-                    Window.Button_CopyMarkdownAsHtml(WebBrowser, null);
+                    Window.Model.Commands.CopyAsHtmlCommand.Execute(null);
                 }
-                if (key == "ctrl-shift-down")
+                else if (key == "RemoveMarkdownFormatting")
                 {
-                    if (Window.PreviewBrowser.IsVisible)
+                    Window.Model.Commands.RemoveMarkdownFormattingCommand.Execute(null);
+                }
+                else if (key == "ReloadEditor")
+                {
+                    if (IsDirty())
                     {
-                        dynamic dom = Window.PreviewBrowser.Document;
-                        dom.documentElement.scrollTop += 150;
+                        if (MessageBox.Show(
+                                "You have changes in this document that have not been saved.\r\n\r\n" +
+                                "Are you sure you want to reload the document from disk?",
+                                "Refresh Document", MessageBoxButton.YesNo, MessageBoxImage.Warning,
+                                MessageBoxResult.No) != MessageBoxResult.Yes)
+                            return;
                     }
+
+                    AceEditor = null;
+                    MarkdownDocument.Load();
+                    LoadDocument(MarkdownDocument, true);
+                    PreviewMarkdownCallback();
+                    SetEditorFocus();
+                    IsDirty(); // refresh dirty flag
                 }
-                if (key == "ctrl-shift-up")
+                else if (key == "NextTab")
                 {
-                    if (Window.PreviewBrowser.IsVisible)
+                    var tab = Window.TabControl.SelectedItem;
+                    var tabs = Window.TabControl.GetOrderedHeaders().ToList();
+                    var selIndex = 0;
+                    bool found = false;
+                    foreach (var t in tabs)
                     {
-                        dynamic dom = Window.PreviewBrowser.Document;
-                        dom.documentElement.scrollTop -= 150;
+                        selIndex++;
+                        if (t.Content == tab)
+                        {
+                            found = true;
+                            if (selIndex >= tabs.Count)
+                                selIndex = 0;
+                            break;
+                        }
                     }
+
+                    if (!found)
+                        return;
+
+                    Window.TabControl.SelectedItem = tabs[selIndex].Content;
+                }
+
+                else if (key == "PreviousTab")
+                {
+                    var tab = Window.TabControl.SelectedItem;
+                    var tabs = Window.TabControl.GetOrderedHeaders().ToList();
+                    var selIndex = 0;
+                    bool found = false;
+                    foreach (var t in tabs)
+                    {
+                        if (t.Content == tab)
+                        {
+                            found = true;
+                            selIndex--;
+                            if (selIndex < 0)
+                                selIndex = tabs.Count - 1;
+                            break;
+                        }
+
+                        selIndex++;
+                    }
+
+                    if (!found)
+                        return;
+
+                    Window.TabControl.SelectedItem = tabs[selIndex].Content;
                 }
                 // zooming
-                if (key == "ctrl-=")
+                else if (key == "ZoomEditorUp")
                 {
-                    mmApp.Configuration.EditorFontSize++;
+                    mmApp.Configuration.Editor.ZoomLevel += 2;
                     RestyleEditor();
                 }
-                if (key == "ctrl--")
+                else if (key == "ZoomEditorDown")
                 {
-                    mmApp.Configuration.EditorFontSize--;
+                    mmApp.Configuration.Editor.ZoomLevel -= 2;
                     RestyleEditor();
                 }
             }, System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+
+        public void FindAndReplaceText(string search, string replace)
+        {
+            AceEditor?.findAndReplaceText(search, replace);
+        }
+
+
+        /// <summary>
+        /// Pre-processing for HREF link clicks in the Preview document
+        /// 
+        /// .md documents are navigated by opening
+        /// http links are navigated with Shell browsers if PreviewExternal is enabled
+        /// Addins can intercept and if return true handle navigation completely.
+        /// </summary>
+        /// <param name="url"></param>
+        /// <returns>true if the navigation is handled, false to continue letting app handle navigation</returns>
+        public bool PreviewLinkNavigation(string url, string src)
+        {
+            if (string.IsNullOrEmpty(url))
+                return false;
+
+            if (AddinManager.Current.RaiseOnPreviewLinkNavigation(url, src))
+                return true;
+
+            // file urls are fully qualified paths with file:/// syntax
+            var urlPath = url.Replace("file:///", "");
+            urlPath = StringUtils.UrlDecode(urlPath);
+            urlPath = FileUtils.NormalizePath(urlPath);
+
+            if (url.StartsWith("http://", StringComparison.InvariantCultureIgnoreCase) || url.StartsWith("https://", StringComparison.InvariantCultureIgnoreCase))
+            {
+                if (mmApp.Configuration.PreviewHttpLinksExternal)
+                {
+                    ShellUtils.GoUrl(url);
+                    return true;
+                }
+            }
+            // it's a relative URL and ends with .md open in editor
+            else if (url.EndsWith(".md", StringComparison.InvariantCultureIgnoreCase))
+            {
+               // full path
+                if (File.Exists(urlPath))
+                {
+                    var tab = Window.RefreshTabFromFile(urlPath); // open or activate
+                    if (tab != null)
+                        return true;
+                }
+
+                // relative path
+                var docPath = Path.GetDirectoryName(MarkdownDocument.Filename);
+                urlPath = Path.Combine(docPath, urlPath);
+                                
+                if (File.Exists(urlPath))
+                {
+                    var tab = Window.RefreshTabFromFile(docPath); // open or activate
+                    if (tab != null)
+                        return true;
+                }
+            }
+            else if (url.EndsWith(".pdf", StringComparison.InvariantCultureIgnoreCase))
+            {
+                // relative path
+                var docPath = Path.GetDirectoryName(MarkdownDocument.Filename);
+                urlPath = Path.Combine(docPath, urlPath);
+                if (File.Exists(urlPath))
+                {
+                    ShellUtils.GoUrl(urlPath);
+                    return true;
+                }
+            }
+
+            // default browser behavior
+            return false;
         }
 
         /// <summary>
@@ -827,186 +1852,387 @@ namespace MarkdownMonster
         /// </summary>
         public void PasteOperation()
         {
-            if (Clipboard.ContainsImage())
-            {
-                string imagePath = null;
-                
-                var bmpSource = Clipboard.GetImage();
-                using (var bitMap = WindowUtilities.BitmapSourceToBitmap(bmpSource))
-                {
-                    imagePath = AddinManager.Current.RaiseOnSaveImage(bitMap);
-                }
-                if (!string.IsNullOrEmpty(imagePath))
-                {
-                    SetSelection($"![]({imagePath})");
-                    PreviewMarkdownCallback(); // force a preview refresh
-                    return;
-                }
-                
-                string initialFolder = null;
-                if (!string.IsNullOrEmpty(MarkdownDocument.Filename) && MarkdownDocument.Filename != "untitled")
-                    initialFolder = Path.GetDirectoryName(MarkdownDocument.Filename);
-
-                var sd = new SaveFileDialog
-                {
-                    Filter = "Image files (*.png;*.jpg;*.gif;)|*.png;*.jpg;*.jpeg;*.gif|All Files (*.*)|*.*",
-                    FilterIndex = 1,
-                    Title = "Save Image from Clipboard as",                    
-                    InitialDirectory = initialFolder,
-                    CheckFileExists = false,
-                    OverwritePrompt = true,
-                    CheckPathExists = true,
-                    RestoreDirectory = true
-                };
-                var result = sd.ShowDialog();
-                if (result != null && result.Value)
-                {
-                    imagePath = sd.FileName;
-
-                    try
-                    {
-                        var ext = Path.GetExtension(imagePath)?.ToLower();
-
-                        using (var fileStream = new FileStream(imagePath, FileMode.Create))
-                        {
-                            BitmapEncoder encoder = null;
-                            if (ext == ".png")
-                                encoder = new PngBitmapEncoder();
-                            else if (ext == ".jpg")
-                                encoder = new JpegBitmapEncoder();
-                            else if (ext == ".gif")
-                                encoder = new GifBitmapEncoder();
-
-                            encoder.Frames.Add(BitmapFrame.Create(bmpSource));
-                            encoder.Save(fileStream);
-
-                            if (ext == ".png")
-                                mmFileUtils.OptimizePngImage(sd.FileName,5); // async
-                        }                        
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show("Couldn't copy file to new location: \r\n" + ex.Message, mmApp.ApplicationName);
-                        return;                                                                                        
-                    }
-
-                    string relPath = Path.GetDirectoryName(sd.FileName);
-                    if (initialFolder != null)
-                    {
-                        try                                                                                                
-                        {
-                            relPath = FileUtils.GetRelativePath(sd.FileName, initialFolder);
-                        }
-                        catch (Exception ex)
-                        {
-                            mmApp.Log($"Failed to get relative path.\r\nFile: {sd.FileName}, Path: {imagePath}", ex);
-                        }                        
-                        imagePath = relPath;
-                    }
-
-                    if (imagePath.Contains(":\\"))
-                        imagePath = "file:///" + imagePath;
-                    else
-                       imagePath = imagePath.Replace("\\", "/");
-
-                    SetSelection($"![]({imagePath})");
-                    PreviewMarkdownCallback(); // force a preview refresh
-                }
-            }
-            else if (Clipboard.ContainsText())
+            if (Clipboard.ContainsText())
             {
                 // just paste as is at cursor or selection
                 SetSelection(Clipboard.GetText());
             }
-        }
-
-        public void ExecEditorCommand(string action, object parm = null)
-        {
-            AceEditor.execcommand(action, parm);
-        }
-
-
-        
-
-        public void ResizeWindow()
-        {
-            return;
-        }
-        #endregion
-
-        #region SpellChecking interactions
-        static Hunspell GetSpellChecker(string language = "EN_US", bool reload = false)
-        {
-            if (reload || _spellChecker == null)
+            else if (ClipboardHelper.ContainsImage())
             {
-                string dictFolder = Path.Combine(Environment.CurrentDirectory,"Editor\\");
+                string imagePath = null;
 
-                string aff = dictFolder + language + ".aff";
-                string dic = Path.ChangeExtension(aff,"dic");
-
-                _spellChecker = new Hunspell(aff, dic);
-
-                // Custom Dictionary if any
-                string custFile = Path.Combine(mmApp.Configuration.CommonFolder,language + "_custom.txt");
-                if (File.Exists(custFile))
+                using (var bitMap = System.Windows.Forms.Clipboard.GetImage())
                 {
-                    var lines = File.ReadAllLines(custFile);
-                    foreach (var line in lines)
+                    imagePath = AddinManager.Current.RaiseOnSaveImage(bitMap);
+
+                    if (!string.IsNullOrEmpty(imagePath))
                     {
-                        _spellChecker.Add(line);
+                        SetSelection($"![]({imagePath.Replace(" ", "%20")})");
+                        PreviewMarkdownCallback(); // force a preview refresh
+                        return;
+                    }
+
+                    string initialFolder = MarkdownDocument.LastImageFolder;
+                    string documentPath = null;
+                    if (!string.IsNullOrEmpty(MarkdownDocument.Filename) && MarkdownDocument.Filename != "untitled")
+                    {
+                        documentPath = Path.GetDirectoryName(MarkdownDocument.Filename);
+                        if (string.IsNullOrEmpty(initialFolder))
+                            initialFolder = documentPath;
+                    }
+
+                    var sd = new SaveFileDialog
+                    {
+                        Filter = "Image files (*.png;*.jpg;*.gif;)|*.png;*.jpg;*.jpeg;*.gif|All Files (*.*)|*.*",
+                        FilterIndex = 1,
+                        Title = "Save Image from Clipboard as",
+                        InitialDirectory = initialFolder,
+                        CheckFileExists = false,
+                        OverwritePrompt = true,
+                        CheckPathExists = true,
+                        RestoreDirectory = true
+                    };
+                    var result = sd.ShowDialog();
+                    if (result != null && result.Value)
+                    {
+                        
+                        imagePath = sd.FileName;
+                        var ext = Path.GetExtension(imagePath)?.ToLower();
+
+                        try
+                        {
+                            File.Delete(imagePath);
+
+                            if (ext == ".jpg" || ext == ".jpeg")
+                            {
+                                using (var bmp = new Bitmap(bitMap))
+                                {
+                                    ImageUtils.SaveJpeg(bmp, imagePath, mmApp.Configuration.JpegImageCompressionLevel);
+                                }
+                            }
+                            else
+                            {
+                                var format = ImageUtils.GetImageFormatFromFilename(imagePath);
+                                bitMap.Save(imagePath, format);
+                                bitMap.Dispose();
+
+                                if (ext == ".png" || ext == ".jpeg")
+                                    mmFileUtils.OptimizeImage(sd.FileName); // async                            
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show("Couldn't copy file to new location: \r\n" + ex.Message,
+                                mmApp.ApplicationName);
+                            return;
+                        }
+
+                        MarkdownDocument.LastImageFolder = Path.GetDirectoryName(sd.FileName);
+                        string relPath = Path.GetDirectoryName(sd.FileName);
+                        if (documentPath != null)
+                        {
+                            try
+                            {
+                                relPath = FileUtils.GetRelativePath(sd.FileName, documentPath);                                
+                            }
+                            catch (Exception ex)
+                            {
+                                mmApp.Log($"Failed to get relative path.\r\nFile: {sd.FileName}, Path: {imagePath}",
+                                    ex);
+                            }
+
+                            imagePath = relPath;
+                        }
+
+                        if (imagePath.Contains(":\\"))
+                            imagePath = "file:///" + imagePath;
+                        else
+                            imagePath = imagePath.Replace("\\", "/");
+
+                        SetSelectionAndFocus($"![]({imagePath.Replace(" ", "%20")})");
+                        
+                        // Force the browser to refresh completely so image changes show up
+                        Window.PreviewBrowser.Refresh(true);
+                        //PreviewMarkdownCallback(); // force a preview refresh
                     }
                 }
+            }            
+        }
+
+        /// <summary>
+        /// Embeds a dropped file as an image. If not an image no action is taken
+        /// </summary>
+        /// <param name="file"></param>
+        public void EmbedDroppedFileAsImage(string file)
+        {
+            //NavigatingCancelEventArgs e;
+            string ext = Path.GetExtension(file).ToLower();
+
+            if (ext == ".png" || ext == ".gif" || ext == ".jpg" || ext == ".jpeg" || ext == ".svg")
+            {
+                var docPath = MarkdownDocument.LastImageFolder;                
+                if (string.IsNullOrEmpty(docPath))
+                    docPath = Path.GetDirectoryName(MarkdownDocument.Filename); 
+
+                // if lower than 1 level down off base path ask to save the file
+                string relFilePath = FileUtils.GetRelativePath(file, docPath);
+                if (relFilePath.StartsWith("..\\..") || relFilePath.Contains(":\\"))
+                {
+                    var sd = new SaveFileDialog
+                    {
+                        Filter =
+                            "Image files (*.png;*.jpg;*.gif;)|*.png;*.jpg;*.jpeg;*.gif|All Files (*.*)|*.*",
+                        FilterIndex = 1,
+                        Title = "Save dropped Image as",
+                        InitialDirectory = docPath,
+                        FileName = Path.GetFileName(file),
+                        CheckFileExists = false,
+                        OverwritePrompt = true,
+                        CheckPathExists = true,
+                        RestoreDirectory = true
+                    };
+                    var result = sd.ShowDialog();
+                    if (result == null || !result.Value)
+                        return;
+
+                    relFilePath = FileUtils.GetRelativePath(sd.FileName, docPath);
+
+                    File.Copy(file, sd.FileName, true);
+
+                    MarkdownDocument.LastImageFolder = Path.GetDirectoryName(sd.FileName);
+                }
+
+                if (!relFilePath.Contains(":\\"))
+                    relFilePath = relFilePath.Replace("\\", "/");
+                else
+                    relFilePath = "file:///" + relFilePath;
+
+                AceEditor.setselpositionfrommouse(false);
+
+                Window.Dispatcher.InvokeAsync(() =>
+                {
+                    SetSelectionAndFocus($"\r\n![]({relFilePath.Replace(" ", "%20")})\r\n");
+
+                    // Force the browser to refresh completely so image changes show up
+                    Window.PreviewBrowser.Refresh(true);
+                }, DispatcherPriority.ApplicationIdle);
+
+
+
+                Window.Activate();
             }
-
-            return _spellChecker;
+            else if (mmApp.AllowedFileExtensions.Contains($",{ext},"))
+            {
+                Window.OpenTab(file, rebindTabHeaders: true);
+            }
         }
-        private static Hunspell _spellChecker = null;
-        
+
+        public void PreviewContextMenu(dynamic position)
+        {
+            Window.PreviewBrowser.ExecuteCommand("PreviewContextMenu");
+        }
+
 
         /// <summary>
-        /// Check spelling of an individual word
+        /// Return keyboard bindings object as a JSON string so we can bind inside
+        /// of the editor JavaScript
+        /// </summary>
+        /// <returns></returns>
+        public string GetKeyBindingsJson()
+        {
+            return JsonSerializationUtils.Serialize(
+                mmApp.Model.Window.KeyBindings.KeyBindings.Where(kb => kb.HasJavaScriptHandler));
+        }
+
+        #endregion
+
+
+        #region SpellChecking interactions
+
+        /// <summary>
+        /// Forces the document to be spell checked again
+        /// </summary>
+        /// <returns></returns>
+        public void SpellCheckDocument()
+        {
+            if (mmApp.Configuration.Editor.EnableSpellcheck)
+                AceEditor.spellcheckDocument(true);
+        }
+
+        public void SetSpellChecking(bool turnOff)
+        {
+            mmApp.Configuration.Editor.EnableSpellcheck = !turnOff;
+            if (turnOff)
+                Window.ShowStatusError(
+                    "Spell checking has been turned off as there are too many spelling errors. Please check your language.");
+        }
+
+        /// <summary>
+        /// Check spelling of an individual word - called from ACE Editor
         /// </summary>
         /// <param name="text"></param>
         /// <param name="language"></param>
         /// <param name="reload"></param>
         /// <returns></returns>
-        public bool CheckSpelling(string text,string language = "EN_US",bool reload = false)
+        public bool CheckSpelling(string text, string language = "en-US", bool reload = false)
         {
-            var hun = GetSpellChecker(language, reload);
-            return hun.Spell(text);
+            try
+            {
+                return SpellChecker.CheckSpelling(text, language, reload);
+            }
+            catch
+            {
+                Window.ShowStatusError("Spell checker failed to load.");
+                return false;
+            }
         }
 
-
         /// <summary>
-        /// Returns spelling suggestions for an individual word
+        /// Shows spell check context menu options
         /// </summary>
         /// <param name="text"></param>
         /// <param name="language"></param>
         /// <param name="reload"></param>
         /// <returns></returns>
-        public string GetSuggestions(string text, string language = "EN_US", bool reload = false)
+        public void GetSuggestions(string text, string language = null, bool reload = false, object range = null)
         {
-            var hun = GetSpellChecker(language, reload); 
+            if (language == null)
+                language = Window.Model.Configuration.Editor.Dictionary;
 
-            var sugg = hun.Suggest(text).Take(10).ToArray();
+            var suggestions = SpellChecker.GetSuggestions(text, language, reload);
 
-            return JsonConvert.SerializeObject(sugg);            
+            var cm = new EditorContextMenu();
+            cm.ShowContextMenuAll(suggestions, range);
         }
+
+        /// <summary>
+        /// Shows the Editor Context Menu at the current position
+        /// 
+        /// called from editor
+        /// </summary>
+        public void EditorContextMenu()
+        {
+            AceEditor?.showSuggestions(false);
+        }
+
 
         /// <summary>
         /// Adds a new word to add-on the dictionary for a given locale
         /// </summary>
-        /// <param name="word"></param>
-        /// <param name="lang"></param>
-        public void AddWordToDictionary(string word, string lang = "EN_US")
+        /// <param name="word">Word to add</param>
+        /// <param name="lang">Dictionary to add to or the current one in use</param>
+        public void AddWordToDictionary(string word, string lang = null)
         {
-            File.AppendAllText(Path.Combine(mmApp.Configuration.CommonFolder + "\\",  lang + "_custom.txt"),word  + "\n");
-            _spellChecker.Add(word);            
+            if (lang == null)
+                lang = Window.Model.Configuration.Editor.Dictionary;
+
+            if (!SpellChecker.AddWordToDictionary(word, lang))
+                Window.ShowStatusError(
+                    "Couldn't add word to dictionary. Most likely you don't have write access in the settings folder.");
+            else
+            {
+                AceEditor.isDirty = true;
+            }
         }
+
         #endregion
 
 
+        #region Events Raised by the editor calling back to WPF
+
+        /// <summary>
+        /// Allows the Editor to raise events that can be captured by 
+        /// Addins that are subscribed to OnNotifyAddin.
+        /// </summary>
+        public void NotifyAddins(string command, object parameter)
+        {
+            if (parameter == null || parameter == DBNull.Value)
+                parameter = this;
+
+            AddinManager.Current.RaiseOnNotifyAddin(command, parameter);
+        }
+
+        #endregion
+
+        /// <summary>
+        /// Handle dropping of files 
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void WebBrowser_NavigatingAndDroppingFiles(object sender, NavigatingCancelEventArgs e)
+        {
+            var url = e.Uri.ToString().ToLower();
+
+            if (url.Contains("editor.htm") || url.Contains("editorsimple.htm"))
+                return; // continue navigating
+
+            // otherwise we either handle or don't allow
+            e.Cancel = true;
+
+            // if it's a URL or ??? don't navigate
+            if (!e.Uri.IsFile)
+                return;
+
+            string file = e.Uri.LocalPath;
+
+            EmbedDroppedFileAsImage(file);
+        }
+
+        public override string ToString()
+        {
+            return MarkdownDocument?.Filename ?? base.ToString();
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        [NotifyPropertyChangedInvocator]
+        public virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public enum EditorSplitModes
+    {
+        None,
+        Below,
+        Beside
     }
 
 
+    [DebuggerDisplay("Row: {row},Col: {column}")]
+    public class AcePosition
+    {
+        public int row { get; set; }
+        public int column { get; set; }
+    }
+
+    public struct EditorStyle
+    {
+        public string Theme;
+        public string Font;
+
+        //public int FontSize;
+
+        //public decimal LineHeight;
+
+        public bool WrapText;
+
+        public bool ShowWhiteSpace;
+
+        public bool ShowLineNumbers;
+
+        public bool HighlightActiveLine;
+
+        public string KeyboardHandler;
+
+    }
+
+    public class SelectionRange
+    {
+        public int StartRow { get; set; }
+        public int StartColumn { get; set; }
+        public int EndRow { get; set; }
+        public int EndColumn { get; set; }
+    }
 }

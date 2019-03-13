@@ -1,20 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Collections.ObjectModel;
 using System.Linq;
-using System.Reflection;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using CookComputing.XmlRpc;
-using FontAwesome.WPF;
 using MahApps.Metro.Controls;
-using MahApps.Metro.Controls.Dialogs;
 using MarkdownMonster;
 using MarkdownMonster.Windows;
 using WebLogAddin;
+using WebLogAddin.Medium;
 using WebLogAddin.MetaWebLogApi;
 using Westwind.Utilities;
 
@@ -23,112 +21,151 @@ namespace WeblogAddin
     /// <summary>
     /// Interaction logic for About.xaml
     /// </summary>
-    public partial class WebLogForm : MetroWindow
+    public partial class WeblogForm : MetroWindow
     {
-        public WeblogAddinModel Model { get; set;  }
+        public WeblogAddinModel Model { get; set; }
+
+        public StatusBarHelper StatusBar { get; }
 
 
         #region Startup and Shutdown
 
-        public WebLogForm()
-        {            
-            Model = new WeblogAddinModel()
-            {
-                ActivePostMetadata = new WeblogPostMetadata(),
-                Configuration = WeblogAddinConfiguration.Current,
-                Window = this
-            };
+        public WeblogForm(WeblogAddinModel model)
+        {
+            Model = model;
+            model.ActivePostMetadata = new WeblogPostMetadata();
 
-            mmApp.SetTheme(mmApp.Configuration.ApplicationTheme);
+            model.ActiveWeblogInfo = new WeblogInfo();
 
-            InitializeComponent();            
+            model.Window = this;
 
-            DataContext = Model;
+            InitializeComponent();
 
-            // Code bindings
-            ComboWeblogType.ItemsSource = Enum.GetValues(typeof(WeblogTypes)).Cast<WeblogTypes>();            
+            mmApp.SetThemeWindowOverride(this);
+            if (mmApp.Configuration.ApplicationTheme == Themes.Light)
+                TabControl.Background = (SolidColorBrush) Resources["LightThemeTitleBackground"];
 
             Loaded += WebLogStart_Loaded;
             Closing += WebLogStart_Closing;
+
+            StatusBar = new StatusBarHelper(StatusText, StatusIcon);
         }
 
         private void WebLogStart_Loaded(object sender, System.Windows.RoutedEventArgs e)
         {
-            //Model.LoadWebLognames();
+
+            // Code bindings
+            ComboWeblogType.ItemsSource = Enum.GetValues(typeof(WeblogTypes)).Cast<WeblogTypes>();
 
             var editor = Model.AppModel.ActiveEditor;
+
             if (editor == null)
+            {
+                DataContext = Model;
                 return;
+            }
 
             var markdown = editor.GetMarkdown();
-            Model.ActivePostMetadata = Model.Addin.GetPostConfigFromMarkdown(markdown);
-                
+            Model.ActivePostMetadata =
+                WeblogPostMetadata.GetPostConfigFromMarkdown(markdown, Model.ActivePost, Model.ActiveWeblogInfo);
+
+            Model.MetadataCustomFields =
+                new ObservableCollection<CustomField>(
+                    Model.ActivePostMetadata.CustomFields.Select(kv => kv.Value));
+
             var lastBlog = WeblogAddinConfiguration.Current.LastWeblogAccessed;
 
             if (string.IsNullOrEmpty(Model.ActivePostMetadata.WeblogName))
                 Model.ActivePostMetadata.WeblogName = lastBlog;
+
+
+            // have to do this here otherwise MetadataCustomFields is not updating in model
+            DataContext = Model;
         }
 
 
         private void WebLogStart_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
             // save settings
-            WeblogAddinConfiguration.Current.Write();
+            if (Model.ActiveWeblogInfo != null)
+                Model.Configuration.LastWeblogAccessed = Model.ActiveWeblogInfo.Name;
+            Model.Configuration.Write();
         }
 
         #endregion
 
         #region Button Handlers
+
         private async void ButtonPostBlog_Click(object sender, System.Windows.RoutedEventArgs e)
         {
-            ShowStatus("Uploading Blog post...");
-            SetStatusIcon(FontAwesome.WPF.FontAwesomeIcon.Upload, Colors.Orange, true);
+            StatusBar.ShowStatusProgress("Uploading Blog post...");
+
+            GetCustomFieldsFromObservableCollection();
 
 
+            if (string.IsNullOrEmpty(Model.ActivePostMetadata.WeblogName))
+            {
+                MessageBox.Show("Please select or create a Weblog to post to before posting.",
+                    "No Weblog Selected",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                if (Model.WeblogNames.Count == 0)
+                    ActiveWebLogsPageForNew();
+                else
+                    ComboWebLogSite.Focus();
+
+                StatusBar.ShowStatus();
+                return;
+            }
+
+            var editor = Model.AppModel.ActiveEditor;
             // Update the Markdown document first
-            string markdown = Model.Addin.SetConfigInMarkdown(Model.ActivePostMetadata);
-            Model.AppModel.ActiveEditor.SetMarkdown(markdown);
-            
+            string markdown = Model.ActivePostMetadata.SetPostYaml();
+            editor.SetMarkdown(markdown);
+            editor.SaveDocument();
+
             WeblogAddinConfiguration.Current.LastWeblogAccessed = Model.ActivePostMetadata.WeblogName;
 
             var window = Model.AppModel.Window;
-            
+
             try
             {
-                await Dispatcher.InvokeAsync(() =>
+                bool result = await Model.Addin.SendPost(Model.ActiveWeblogInfo,
+                    Model.ActivePostMetadata.PostStatus == "draft");
+                if (result)
                 {
-                    // Then send the post - it will re-read the new values
-                    if (Model.Addin.SendPost(sendAsDraft: Model.ActivePostMetadata.IsDraft))
-                        Close();
-                    else
-                        window.ShowStatus("Failed to upload blog post.", 5000);
-
-                }, System.Windows.Threading.DispatcherPriority.Background);                
+                    Close();
+                    window.ShowStatusSuccess($"Blog post '{Model.ActivePost.Title}` uploaded.");
+                }
+                else
+                    window.ShowStatusError("Upload of blog post failed.");
             }
             finally
             {
-                ShowStatus();
-                window.ShowStatus("Blog post uploaded successfully.", 5000);
-                SetStatusIcon();
+                StatusBar.ShowStatus();
             }
         }
 
-        private async void ButtonSaveMeta_Click(object sender, RoutedEventArgs e)
-        {                        
+        void ButtonSaveMeta_Click(object sender, RoutedEventArgs e)
+        {
+            GetCustomFieldsFromObservableCollection();
+
             // Update the Markdown document first
-            string markdown = Model.Addin.SetConfigInMarkdown(Model.ActivePostMetadata);
-            Model.AppModel.ActiveEditor.SetMarkdown(markdown);            
+            string markdown = Model.ActivePostMetadata.SetPostYaml();
+            Model.AppModel.ActiveEditor.SetMarkdown(markdown, updateDirtyFlag: true);
+            Model.AppModel.ActiveEditor.SaveDocument();
+
         }
 
         private void ButtonNewPost_Click(object sender, System.Windows.RoutedEventArgs e)
         {
-         
             string title = Model.NewTitle;
             if (string.IsNullOrEmpty(title))
                 return;
             string weblogName = Model.Configuration.LastWeblogAccessed;
 
-            Model.Addin.CreateNewPostOnDisk(Model.NewTitle, Model.NewFilename, weblogName);                    
+            Model.Addin.CreateNewPostOnDisk(Model.NewTitle, Model.NewFilename, weblogName);
 
             Close();
         }
@@ -143,9 +180,16 @@ namespace WeblogAddin
             }
         }
 
-        private void ComboWebLogName_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {            
-            TextWeblogPassword.Password = "";            
+        private void TextWeblogToken_LostFocus(object sender, RoutedEventArgs e)
+        {
+            Model.ActiveWeblogInfo.AccessToken = TextWeblogToken.Password;
+            TextWeblogToken.Password = string.Empty;
+        }
+
+        private void ComboWebLogName_SelectionChanged(object sender,
+            System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            TextWeblogPassword.Password = "";
         }
 
         private void Button_DeleteWeblog(object sender, RoutedEventArgs e)
@@ -156,49 +200,31 @@ namespace WeblogAddin
                 if (Model.Configuration.Weblogs.Count > 1)
                     Model.ActiveWeblogInfo = Model.Configuration.Weblogs.FirstOrDefault().Value;
 
-                Model.Configuration.Weblogs.Remove(id);                                
+                Model.Configuration.Weblogs.Remove(id);
             }
         }
 
         private void Button_NewWeblog(object sender, RoutedEventArgs e)
         {
-            Model.ActiveWeblogInfo = new WeblogInfo()
-            {                 
-                Name = "New Weblog"
-            };
-            Model.Configuration.Weblogs.Add(Model.ActiveWeblogInfo.Id,Model.ActiveWeblogInfo);
-            Model.Configuration.OnPropertyChanged("Weblogs");
-
-            this.ComboWebLogName.SelectedValue = Model.Configuration.Weblogs[Model.ActiveWeblogInfo.Id];
+            Model.ActiveWeblogInfo = new WeblogInfo();
         }
 
         private async void Button_DownloadPosts_Click(object sender, RoutedEventArgs e)
         {
             WeblogInfo weblogInfo = Model.ActiveWeblogInfo;
 
-            var wrapper = new MetaWeblogWrapper(weblogInfo.ApiUrl,
-                weblogInfo.Username,
-                weblogInfo.DecryptPassword(weblogInfo.Password),
-                weblogInfo.BlogId);
-
-
+            var client = new MetaWebLogWordpressApiClient(weblogInfo);
             Model.Configuration.LastWeblogAccessed = weblogInfo.Name;
 
-            Dispatcher.Invoke(() =>
-            {
-                Model.PostList = new List<Post>();
-                SetStatusIcon(FontAwesomeIcon.Download, Colors.Orange,true); 
-                ShowStatus("Downloading last " + Model.NumberOfPostsToRetrieve + " posts...");                    
-            });
-
-            WindowUtilities.DoEvents();
+            Model.PostList = new List<Post>();
+            StatusBar.ShowStatusProgress($"Downloading last {Model.NumberOfPostsToRetrieve} posts...");
 
             List<Post> posts = null;
             try
             {
                 bool result = await Task.Run(() =>
                 {
-                    posts = wrapper.GetRecentPosts(Model.NumberOfPostsToRetrieve).ToList();
+                    posts = client.GetRecentPosts(Model.NumberOfPostsToRetrieve).ToList();
                     return false;
                 });
             }
@@ -206,14 +232,14 @@ namespace WeblogAddin
             {
                 string message = ex.Message;
                 if (message == "Not Found")
-                    message = "Invalid Blog API Url:\r\n" + weblogInfo.ApiUrl;
-                MessageBox.Show("Unable to download posts:\r\n" + message,mmApp.ApplicationName,
-                    MessageBoxButton.OK,MessageBoxImage.Warning);
+                    message = $"Invalid Blog API Url:\r\n{weblogInfo.ApiUrl}";
+                MessageBox.Show($"Unable to download posts:\r\n{message}", mmApp.ApplicationName,
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                MessageBox.Show("Unable to download posts:\r\n" + ex.Message,mmApp.ApplicationName,
+                MessageBox.Show($"Unable to download posts:\r\n{ex.Message}", mmApp.ApplicationName,
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -229,111 +255,72 @@ namespace WeblogAddin
 
             Dispatcher.Invoke(() =>
             {
-                ShowStatus(posts.Count + " posts downloaded.",5000);
-                SetStatusIcon();
+                StatusBar.ShowStatusSuccess($"{posts.Count} posts downloaded.");
                 Model.PostList = posts;
             });
-
-                       
         }
 
-        private void ListViewPosts_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private async void ListViewPosts_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            CreateDownloadedPost();
+             await CreateDownloadedPost();
         }
-        private void ListViewPosts_KeyDown(object sender, KeyEventArgs e)
+
+        private async void ButtonDownloadPost_Click(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            var li = button.TryFindParent<ListBoxItem>();
+            li.IsSelected = true;
+
+            await CreateDownloadedPost();
+        }
+
+        private async void ListViewPosts_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
-                CreateDownloadedPost();
+               await CreateDownloadedPost();
         }
 
         #endregion
 
-        #region StatusBar
 
-        public void ShowStatus(string message = null, int milliSeconds = 0)
-        {
-            if (message == null)
-                message = "Ready";
-
-            StatusText.Text = message;
-
-            if (milliSeconds > 0)
-            {
-                var t = new Timer(new TimerCallback((object win) =>
-                {
-                    var window = win as WebLogForm;
-                    if (window == null)
-                        return;
-
-                    window.Dispatcher.Invoke(() => { window.ShowStatus(null, 0); });
-                }), this, milliSeconds, Timeout.Infinite);
-            }
-        }
-
-        /// <summary>
-        /// Status the statusbar icon on the left bottom to some indicator
-        /// </summary>
-        /// <param name="icon"></param>
-        /// <param name="color"></param>
-        /// <param name="spin"></param>
-        public void SetStatusIcon(FontAwesomeIcon icon, Color color, bool spin = false)
-        {
-            StatusIcon.Icon = icon;
-            StatusIcon.Foreground = new SolidColorBrush(color);
-            if (spin)
-                StatusIcon.SpinDuration = 30;
-            StatusIcon.Spin = spin;
-        }
-
-        /// <summary>
-        /// Resets the Status bar icon on the left to its default green circle
-        /// </summary>
-        public void SetStatusIcon()
-        {
-            StatusIcon.Icon = FontAwesomeIcon.Circle;
-            StatusIcon.Foreground = new SolidColorBrush(Colors.Green);
-            StatusIcon.Spin = false;
-            StatusIcon.SpinDuration = 0;
-            StatusIcon.StopSpin();
-        }
-        #endregion
-
-        private void CreateDownloadedPost()
+        private async Task CreateDownloadedPost()
         {
 
             var item = ListViewPosts.SelectedItem as Post;
             if (item == null)
                 return;
 
-            string postId = item.PostID.ToString();
+            StatusBar.ShowStatusProgress("Downloading Weblog post '" + item.Title + "'");
+
+
+            string postId = item.PostId.ToString();
             WeblogInfo weblogInfo = Model.ActiveWeblogInfo;
 
-            
             Post post = null;
 
             if (weblogInfo.Type == WeblogTypes.MetaWeblogApi)
             {
                 var wrapper = new MetaWeblogWrapper(weblogInfo.ApiUrl,
                     weblogInfo.Username,
-                    weblogInfo.DecryptPassword(weblogInfo.Password),
+                    mmApp.DecryptString(weblogInfo.Password),
                     weblogInfo.BlogId);
 
                 try
                 {
-                    post = wrapper.GetPost(postId);
+                    post = await Task.Run(() => wrapper.GetPost(postId));
                 }
                 catch (Exception ex)
                 {
+                    StatusBar.ShowStatus();
                     MessageBox.Show("Unable to download post.\r\n\r\n" + ex.Message);
                     return;
-                }                
+                }
             }
             else
             {
                 var wrapper = new WordPressWrapper(weblogInfo.ApiUrl,
                     weblogInfo.Username,
-                    weblogInfo.DecryptPassword(weblogInfo.Password));
+                    mmApp.DecryptString(weblogInfo.Password));
 
                 try
                 {
@@ -341,46 +328,56 @@ namespace WeblogAddin
                 }
                 catch (Exception ex)
                 {
+                    StatusBar.ShowStatus();
                     MessageBox.Show("Unable to download post.\r\n\r\n" + ex.Message);
                     return;
-                }               
+                }
             }
 
             Model.Addin.CreateDownloadedPostOnDisk(post, weblogInfo.Name);
+            Close();
 
-            Close();        
-        }
-
-        private void Button_Click(object sender, RoutedEventArgs e)
-        {
-
+            StatusBar.ShowStatus();
         }
 
         private void ButtonApiUrlInfo_Click(object sender, RoutedEventArgs e)
         {
-            ShellUtils.GoUrl("http://markdownmonster.west-wind.com/docs/_4sh0plup7.htm");
+            ShellUtils.GoUrl("http://markdownmonster.west-wind.com/docs/_4rg0qzg1i.htm");
         }
 
         private void ButtonDiscoverEndpoint_Click(object sender, RoutedEventArgs e)
         {
+            if (Model.ActiveWeblogInfo == null)
+                return;
+
             var discover = new BlogEndpointDiscovery();
 
             var url = Model.ActiveWeblogInfo.ApiUrl;
+            if (string.IsNullOrEmpty(url))
+                return;
 
-            ShowStatus("Checking Endpoint Url...");
+            StatusBar.ShowStatusProgress("Checking Endpoint Url...");
 
             if (discover.CheckRpcEndpoint(url))
             {
-                ShowStatus("The Weblog Endpoint is a valid RPC endpoint.");
+                StatusBar.ShowStatusSuccess("The Weblog Endpoint is a valid RPC endpoint.", 10000);
                 return;
             }
 
-            var blogInfo = discover.DiscoverBlogEndpoint(url, Model.ActiveWeblogInfo.BlogId as string, Model.ActiveWeblogInfo.Type.ToString());
+            var blogInfo = discover.DiscoverBlogEndpoint(url, Model.ActiveWeblogInfo.BlogId as string,
+                Model.ActiveWeblogInfo.Type.ToString());
 
             if (blogInfo.HasError)
             {
-                MessageBox.Show(blogInfo.ErrorMessage, "Unable to discover Endpoint Url",MessageBoxButton.OK,MessageBoxImage.Warning);
-                ShowStatus("Endpoint discovery failed: " + blogInfo.ErrorMessage, 6000);
+                if (url.IndexOf("medium.com", StringComparison.InvariantCultureIgnoreCase) > -1)
+                {
+                    Model.ActiveWeblogInfo.ApiUrl = "https://api.medium.com/v1/";
+                    Model.ActiveWeblogInfo.Type = WeblogTypes.Medium;
+                    StatusBar.ShowStatusSuccess("Weblog API Endpoint Url found and updated.");
+                    return;
+                }
+
+                StatusBar.ShowStatusError($"Endpoint Discovery: {blogInfo.ErrorMessage}");
                 return;
             }
 
@@ -393,7 +390,194 @@ namespace WeblogAddin
             else
                 Model.ActiveWeblogInfo.Type = WeblogTypes.Unknown;
 
-            ShowStatus("Weblog API Endpoint Url found and updated...", 6000);
+            StatusBar.ShowStatusSuccess("Weblog API Endpoint Url found and updated.", 6000);
+        }
+
+        private void ComboWeblogType_SelectionChanged(object sender,
+            System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            // since we
+            Model.OnPropertyChanged(nameof(Model.IsTokenVisible));
+            Model.OnPropertyChanged(nameof(Model.IsUserPassVisible));
+        }
+
+        private void DropDownButton_Click(object sender, RoutedEventArgs e)
+        {
+            StatusBar.ShowStatusProgress("Getting Blog listing information from service...");
+            WindowUtilities.DoEvents();
+
+            var context = Resources["BlogsContextMenu"] as ContextMenu;
+            context.Items.Clear();
+
+            IEnumerable<UserBlog> blogs = null;
+
+            try
+            {
+                if (Model.ActiveWeblogInfo.Type == WeblogTypes.Medium)
+                {
+                    var client = new MediumApiClient(Model.ActiveWeblogInfo);
+                    blogs = client.GetBlogs();
+                    if (blogs == null)
+                        StatusBar.ShowStatusError("Failed to get blog listing: " + client.ErrorMessage);
+                }
+                else if (Model.ActiveWeblogInfo.Type == WeblogTypes.MetaWeblogApi ||
+                         Model.ActiveWeblogInfo.Type == WeblogTypes.Wordpress)
+                {
+                    var client = new MetaWebLogWordpressApiClient(Model.ActiveWeblogInfo);
+                    blogs = client.GetBlogs();
+                    if (blogs == null)
+                        StatusBar.ShowStatusError("Failed to get blog listing: " + client.ErrorMessage);
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusBar.ShowStatusError($"Failed to get blogs: {ex.Message}");
+                return;
+            }
+
+            StatusBar.ShowStatusSuccess("Blogs retrieved.");
+
+            if (blogs == null)
+                return;
+
+            string blogId = Model.ActiveWeblogInfo.BlogId as string;
+
+            if (!string.IsNullOrEmpty(blogId) && !blogs.Any(b => blogId == b.BlogId as string))
+                context.Items.Add(new MenuItem {Header = blogId, Tag = blogId});
+
+            foreach (var blog in blogs)
+            {
+                var item = new MenuItem()
+                {
+                    Header = blog.BlogName,
+                    Tag = blog.BlogId,
+                };
+                item.Click += (s, ea) =>
+                {
+                    var mitem = s as MenuItem;
+                    if (mitem == null)
+                        return;
+
+                    Model.ActiveWeblogInfo.BlogId = mitem.Tag as string;
+                    context.Items.Clear();
+                };
+                context.Items.Add(item);
+            }
+        }
+
+        private void Hyperlink_UrlNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            ShellUtils.GoUrl("https://markdownmonster.west-wind.com/docs/_4rg0qzg1i.htm");
+        }
+
+
+        #region CustomField Handling
+
+        private void ButtonAddCustomField_Click(object sender, RoutedEventArgs e)
+        {
+            Model.MetadataCustomFields.Add(new CustomField
+            {
+                Key = "new_key", Value = "value"
+            });
+            RefreshCustomFields();
+        }
+
+        private void ButtonDeleteCustomField_Click(object sender, RoutedEventArgs e)
+        {
+
+            var item = ListCustomFields.SelectedItem as CustomField;
+            if (item == null)
+                return;
+
+            Model.MetadataCustomFields.Remove(item);
+            RefreshCustomFields();
+        }
+
+        private void GetCustomFieldsFromObservableCollection()
+        {
+            Model.ActivePostMetadata.CustomFields.Clear();
+            foreach (var cf in Model.MetadataCustomFields)
+            {
+                Model.ActivePostMetadata.CustomFields.Add(cf.Key, cf);
+            }
+        }
+
+
+        private void ButtonCustomFieldHelp_Click(object sender, RoutedEventArgs e)
+        {
+            ShellUtils.GoUrl(mmApp.GetDocumentionUrl("_4wq1dbsnh"));
+        }
+
+        private void RefreshCustomFields()
+        {
+            Model.ActivePostMetadata.OnPropertyChanged(nameof(WeblogPostMetadata.CustomFields));
+            Model.OnPropertyChanged(nameof(WeblogAddinModel.MetadataHasCustomFields));
+        }
+
+        #endregion
+
+
+        #region WebLog Site Validations
+
+        private void ButtonSaveWebLogInfo_Click(object sender, RoutedEventArgs e)
+        {
+            if (!Model.Configuration.Weblogs.ContainsKey(Model.ActiveWeblogInfo.Id))
+            {
+                Model.Configuration.Weblogs[Model.ActiveWeblogInfo.Id] = Model.ActiveWeblogInfo;
+                Model.Configuration.OnPropertyChanged(nameof(WeblogAddinConfiguration.Weblogs));
+                ComboWebLogName.SelectedValue = Model.Configuration.Weblogs[Model.ActiveWeblogInfo.Id];
+            }
+
+            WeblogAddinConfiguration.Current.Write();
+        }
+
+        private void ActiveWebLogsPageForNew()
+        {
+            TabControl.SelectedItem = TabWeblogs;
+            Dispatcher.InvokeAsync(ButtonNewWeblog.Focus);
+        }
+
+
+        private void ComboWebLogSite_DropDownOpened(object sender, EventArgs e)
+        {
+            if (ComboWebLogSite.Items.Count == 0)
+                ActiveWebLogsPageForNew();
+        }
+
+        #endregion
+
+        private async void ButtonValidatePassword_Click(object sender, RoutedEventArgs e)
+        {
+            WeblogInfo weblogInfo = Model.ActiveWeblogInfo;
+            if (string.IsNullOrEmpty(weblogInfo.Username) || string.IsNullOrEmpty(weblogInfo.Password))
+            {
+                StatusBar.ShowStatusError("Username and/or password are not set.");
+                return;
+            }
+            var client = new MetaWebLogWordpressApiClient(weblogInfo);
+         
+            Model.PostList = new List<Post>();
+            StatusBar.ShowStatusProgress($"Checking for Weblog access...");
+
+            List<Post> posts = null;
+            try
+            {
+                bool result = await Task.Run(() =>
+                {
+                    posts = client.GetRecentPosts(1).ToList();
+                    return true;
+                });
+                StatusBar.ShowStatusSuccess("Password is valid",5000);
+            }
+            catch (XmlRpcException ex)
+            {
+                StatusBar.ShowStatusError("Password is invalid: " + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                StatusBar.ShowStatusError("Password is invalid: " + ex.Message);                
+            }
+
         }
     }
 }

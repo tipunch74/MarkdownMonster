@@ -34,14 +34,15 @@ _ReSharper*/
 $tf*/
 packages*/
 _preview.html
+node_modules/
 
-/InstallerFiles/*.iw9
-/InstallerFiles/Upload.bat
 WebEssentials-Settings.json
 InstallerFiles/FilesToInstall/AppData/Html/_preview.json
-/MightyMarkdown/Install/Distribution
-/MightyMarkdown/Install/Builds
 /Install/Builds
+
+.vscode
+.idea
+PrecompiledWeb/
 
 /MarkdownMonster.sln.DotSettings
 /Install/Builds/CurrentRelease/MarkdownMonsterSetup.exe
@@ -61,3 +62,6 @@ MarkdownMonster/Editor/scripts/Ace/theme-twilight - Copy.js
 /MediumApi.websurge
 /mm.vshost.exe.config
 /mm.vshost.exe.manifest
+/Tests/WeblogAddin.Test/apikey.txt
+{6AB5E445-9660-454B-BF02-506000EED978}
+MarkdownMonster/Editor/fileicons/sql.svg

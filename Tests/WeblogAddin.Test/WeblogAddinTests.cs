@@ -12,46 +12,32 @@ namespace WeblogAddin.Test
     [TestClass]
     public class WeblogAddinTests
     {
-        private const string ConstWeblogName = "3uqgqcrh";
-        private const string ConstWordPressWeblogName = "Rick's Wordpress Weblog";
+        private const string ConstWeblogName = "rk7wof4b";
+        private const string ConstWordPressWeblogName = "Rick Strahl WordPress";
 
 
         public WeblogAddinTests()
         {
             
         }
-
-        [TestMethod]
-        public void SetConfigInMarkdown()
-        {
-            var meta = new WeblogPostMetadata()
-            {
-                Abstract = "THis is an abstract",
-                Keywords = "Security,SSL,IIS",
-                RawMarkdownBody = MarkdownWithoutPostId,
-                PostId = "2",
-                WeblogName = "Rick Strahl's Web Log"
-            };
-
-            var addin = new WeblogAddin.WebLogAddin();
-            string markdown = addin.SetConfigInMarkdown(meta);
-
-            Console.WriteLine(markdown);
-            Assert.IsTrue(markdown.Contains("<postid>2</postid>"), "Post Id wasn't added");
-        }
+		
 
 
 
         [TestMethod]
         public void GetPostConfigFromMarkdown()
         {
+            WeblogInfo weblogInfo = WeblogAddinConfiguration.Current.Weblogs[ConstWeblogName];
+            Post post = new Post() {};
 
             string markdown = MarkdownWithoutPostId;
             
             var addin = new WeblogAddin.WebLogAddin();
-            var meta = addin.GetPostConfigFromMarkdown(markdown);
+            var meta = WeblogPostMetadata.GetPostConfigFromMarkdown(markdown,post,weblogInfo);
 
-            Console.WriteLine(JsonConvert.SerializeObject(meta, Formatting.Indented));
+            Console.WriteLine("meta: \r\n" + JsonConvert.SerializeObject(meta, Formatting.Indented));
+
+            Console.WriteLine("post: \r\n" +JsonConvert.SerializeObject(post, Formatting.Indented));
 
             Assert.IsTrue(meta.Abstract == "Abstract");
             Assert.IsTrue(meta.Keywords == "Keywords");
@@ -73,12 +59,12 @@ namespace WeblogAddin.Test
                 {
                     new CustomField()
                     {
-                        ID = Guid.NewGuid().ToString(),
+                        Id = Guid.NewGuid().ToString(),
                         Key = "mt_Markdown",
                         Value = "**Markdown Text**"
                     }
                 },
-                PostID = 0,
+                PostId = 0,
                 Title = "Testing a post"
             };
 
@@ -88,7 +74,7 @@ namespace WeblogAddin.Test
                 weblogInfo.Username,
                 weblogInfo.Password);
 
-             rawPost.PostID = wrapper.NewPost(rawPost, true);            
+             rawPost.PostId = wrapper.NewPost(rawPost, true);            
         }
 
         [TestMethod]
@@ -104,12 +90,12 @@ namespace WeblogAddin.Test
                 {
                     new CustomField()
                     {
-                        ID = Guid.NewGuid().ToString(),
+                        Id = Guid.NewGuid().ToString(),
                         Key = "mt_Markdown",
                         Value = "**Markdown Text**"
                     }
                 },
-                PostID = 0,
+                PostId = 0,
                 Title = "Testing a post"
             };
 
@@ -119,7 +105,7 @@ namespace WeblogAddin.Test
                 weblogInfo.Username,
                 weblogInfo.Password);
 
-            rawPost.PostID = wrapper.NewPost(rawPost, true);
+            rawPost.PostId = wrapper.NewPost(rawPost, true);
         }
 
         [TestMethod]
@@ -176,7 +162,7 @@ namespace WeblogAddin.Test
 
             Assert.IsTrue(posts.Count == 2);
 
-            var postId = posts[0].PostID;
+            var postId = posts[0].PostId;
 
             var post = wrapper.GetPost(postId.ToString());
 

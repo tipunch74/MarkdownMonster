@@ -24,6 +24,8 @@ namespace WebLogAddin.MetaWebLogApi
             : this(url, username, password, 0)
         {
             _wrapper = (IWordPressXmlRpc)XmlRpcProxyGen.Create(typeof(IWordPressXmlRpc));
+            _wrapper.KeepAlive = true;
+            _wrapper.UserAgent = "Markdown-Monster";
             _wrapper.Url = url;
         }
 
@@ -38,6 +40,8 @@ namespace WebLogAddin.MetaWebLogApi
             : base(url, username, password, blogId)
         {
             _wrapper = (IWordPressXmlRpc)XmlRpcProxyGen.Create(typeof(IWordPressXmlRpc));
+            _wrapper.KeepAlive = true;
+            _wrapper.UserAgent = "Markdown-Monster";
             _wrapper.Url = url;
         }
 
@@ -45,7 +49,7 @@ namespace WebLogAddin.MetaWebLogApi
         /// Retrieve the blogs of the users.
         /// </summary>
         /// <returns></returns>
-        public override IEnumerable<UserBlog> GetUserBlogs()
+        public override IEnumerable<UserBlog> GetUsersBlogs()
         {
             var xmlRpcResult = _wrapper.GetUserBlogs(Username, Password);
 
@@ -154,8 +158,7 @@ namespace WebLogAddin.MetaWebLogApi
         /// <param name="comment_id"></param>
         /// <returns></returns>
         public bool DeleteComment(string comment_id)
-        {
-            //todo: make validation better - add clearer error handling
+        {            
             try
             {
                 var comment = GetComment(comment_id); ;

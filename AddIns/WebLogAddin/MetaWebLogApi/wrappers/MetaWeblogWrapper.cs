@@ -17,6 +17,8 @@ namespace WebLogAddin.MetaWebLogApi
             : this(url, username, password, "1")
         {
             _wrapper = (IMetaWeblogXmlRpc)XmlRpcProxyGen.Create(typeof(IMetaWeblogXmlRpc));
+            _wrapper.KeepAlive = true;
+            _wrapper.UserAgent = "Markdown-Monster";
             _wrapper.Url = Url;
         }
 
@@ -24,6 +26,8 @@ namespace WebLogAddin.MetaWebLogApi
             : base(url, username, password, blogId)
         {
             _wrapper = (IMetaWeblogXmlRpc)XmlRpcProxyGen.Create(typeof(IMetaWeblogXmlRpc));
+            _wrapper.KeepAlive = true;
+            _wrapper.UserAgent = "Markdown-Monster";
             _wrapper.Url = Url;
         }
 
@@ -36,15 +40,14 @@ namespace WebLogAddin.MetaWebLogApi
         /// <returns>The postid of the newly-created post.</returns>
         public virtual string NewPost(Post post, bool publish)
         {
-            var content = Map.From.Post(post);            
+            var content = Map.From.Post(post);
             return  _wrapper.NewPost(BlogID, Username, Password, content, publish);
         }
-        
 
         public virtual bool EditPost(Post post, bool publish)
         {            
             var content = Map.From.Post(post);
-            return Convert.ToBoolean(_wrapper.EditPost(post.PostID.ToString(), Username, Password, content, publish));            
+            return Convert.ToBoolean(_wrapper.EditPost(post.PostId.ToString(), Username, Password, content, publish));            
         }
 
         public virtual Post GetPost(object postID)
@@ -105,9 +108,9 @@ namespace WebLogAddin.MetaWebLogApi
         /// Gets the blogs for the logged in user.
         /// </summary>
         /// <returns></returns>
-        public override IEnumerable<UserBlog> GetUserBlogs()
+        public override IEnumerable<UserBlog> GetUsersBlogs()
         {
-            var result = _wrapper.GetUserBlogs(Username, Password);
+            var result = _wrapper.GetUsersBlogs(null, Username, Password);
             foreach (var r in result)
                 yield return Map.To.UserBlog(r);
         }

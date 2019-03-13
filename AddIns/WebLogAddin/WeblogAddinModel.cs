@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -7,6 +8,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
 using MarkdownMonster;
 using WebLogAddin.MetaWebLogApi;
 using Westwind.Utilities;
@@ -57,19 +59,48 @@ namespace WeblogAddin
             }
         }
 
+        private Post _activePost = new Post();
+
+        public Post ActivePost
+        {
+            get => _activePost;
+	        set
+            {
+                if (!value.Equals(_activePost)) return;
+                OnPropertyChanged(nameof(ActivePost));
+                _activePost = value;
+            }
+        }
+
         public WeblogPostMetadata ActivePostMetadata
         {
-            get { return _activePostMetadata; }
-            set
+            get => _activePostMetadata;
+	        set
             {
                 if (Equals(value, _activePostMetadata)) return;
                 _activePostMetadata = value;
                 OnPropertyChanged(nameof(ActivePostMetadata));
             }
         }
+		
 
+		public ObservableCollection<CustomField> MetadataCustomFields
+		{
+			get => _metadataCustomFields;
+			set
+			{
+				if (value == _metadataCustomFields) return;
+				_metadataCustomFields = value;
+				OnPropertyChanged(nameof(MetadataCustomFields));
+				OnPropertyChanged(nameof(MetadataHasCustomFields));
+			}
+		}
+	    private ObservableCollection<CustomField> _metadataCustomFields = new ObservableCollection<CustomField>();
+		
+	    
+	    public bool MetadataHasCustomFields => MetadataCustomFields.Any();
 
-        public WeblogInfo ActiveWeblogInfo
+	    public WeblogInfo ActiveWeblogInfo
         {
             get { return _activeWeblogInfo; }
             set
@@ -77,6 +108,10 @@ namespace WeblogAddin
                 if (value == _activeWeblogInfo) return;
                 _activeWeblogInfo = value;
                 OnPropertyChanged(nameof(ActiveWeblogInfo));
+                OnPropertyChanged(nameof(IsUserPassVisible));
+                OnPropertyChanged(nameof(IsTokenVisible));
+                OnPropertyChanged(nameof(IsAbstractVisible));
+                OnPropertyChanged(nameof(IsCategoriesVisible));
             }
         }
         private WeblogInfo _activeWeblogInfo;
@@ -105,7 +140,7 @@ namespace WeblogAddin
                 if (value == _newTitle) return;
                 _newTitle = value;                
                 OnPropertyChanged(nameof(NewTitle));
-                NewFilename = mmFileUtils.SafeFilename(StringUtils.ToCamelCase(value)) + ".md";                
+                NewFilename = FileUtils.SafeFilename(StringUtils.ToCamelCase(value)) + ".md";                
             }
         }
 
@@ -150,6 +185,16 @@ namespace WeblogAddin
             }
         }
 
+
+        public bool IsTokenVisible => ActiveWeblogInfo?.Type == WeblogTypes.Medium;
+
+        public bool IsUserPassVisible => ActiveWeblogInfo?.Type != WeblogTypes.Medium;
+
+        public bool IsAbstractVisible => ActiveWeblogInfo?.Type != WeblogTypes.Medium;
+
+        public bool IsCategoriesVisible => ActiveWeblogInfo?.Type != WeblogTypes.Medium;
+
+
         public List<Post> PostList
         {
             get
@@ -172,13 +217,16 @@ namespace WeblogAddin
 
 
 
-        public WebLogForm Window { get; set; }
+        public WeblogForm Window { get; set; }
 
 
         public List<string> WeblogNames
         {
             get
             {
+                if (_WeblogNames.Count == 0)
+                    LoadWebLognames();
+
                 return _WeblogNames;
             }
             set
@@ -197,13 +245,17 @@ namespace WeblogAddin
         {
             WeblogNames = Configuration.Weblogs.Select(wl => wl.Value.Name).ToList();            
         }
+
+
+
         public event PropertyChangedEventHandler PropertyChanged;
 
-
-        
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        public virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+
+
+
     }
 }

@@ -4,40 +4,25 @@
 #           Release has been checked in to GitHub Repo
 #   Builds: ChocolateyInstall.ps1 file with download URL and sha256 embedded
 
-cd "$PSScriptRoot" 
+Set-Location "$PSScriptRoot" 
 
-$sourceFolder = "..\Distribution" 
+Copy-Item ..\builds\currentrelease\MarkdownMonsterPortable.zip .\tools
 
+$sha = get-filehash -path ".\tools\MarkdownMonsterPortable.zip" -Algorithm SHA256  | select -ExpandProperty "Hash"
+write-host $sha
 
-remove-item ".\tools" -recurse -force
+$filetext = @"
+`VERIFICATION
+`MarkdownMonster.Portable.zip
+`SHA256 Checksum Value: $sha
+"@
+out-file -filepath .\tools\Verification.txt -inputobject $filetext
 
-# $file = "$sourceFolder\MarkdownMonster.exe"
-# write-host $file
+Remove-Item *.nupkg
 
-# $sha = get-filehash -path "$file" -Algorithm SHA256  | select -ExpandProperty "Hash"
-# write-host $sha
-
-robocopy $sourceFolder .\tools /MIR
-copy ..\license.txt .\tools\license.txt
-
-#empty install file - we just have content no code
-#$filetext = ""
-#out-file -filepath .\tools\chocolateyinstall.ps1 -inputobject $filetext
-
-# uninstall script
-# copy chocolateyuninstall.ps1 .\tools
-
-#$filetext = @"
-#MarkdownMonster.exe
-#Sha256: $sha
-#"@
-# out-file -filepath .\tools\verify.txt -inputobject $filetext
-
-del *.nupkg
-
-# Create .nupkg from .nuspec
+# Create .nupkg from .nuspec    
 choco pack
 
 choco uninstall "MarkdownMonster.Portable"
 
-choco install "MarkdownMonster.Portable" -fdv -y  -s ".\" 
+choco install "MarkdownMonster.Portable" -fd -y  -s ".\" 

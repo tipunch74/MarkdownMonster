@@ -1,4 +1,4 @@
-﻿var te = {
+var te = {
     mmEditor: null,
     isPreviewEditorSync: false,
     codeScrolled: new Date().getTime() + 2500
@@ -9,20 +9,51 @@ var isDebug = false;
 // to pass in the form object and pass back the text
 // editor instance that allows the parent to make
 // calls into this component
-function initializeinterop(editor) {    
-    te.mmEditor = editor;    
-    te.isPreviewEditorSync = te.mmEditor.IsPreviewToEditorSync();
+function initializeinterop(editor) {
+    if (window.dotnetProxy) {
+        te.mmEditor = window.dotnetProxy;        
+    } else
+        te.mmEditor = editor;
+
+    te.isPreviewEditorSync = te.mmEditor.isPreviewToEditorSync();
     scroll();    
+    
 }
 
 $(document).ready(function() {
     highlightCode();
+
+    // navigate all links externally in default browser
+    $(document).on("click","a",
+        function(e) {
+            var url = this.href;
+            var rawHref = $(this).attr("href");
+            var hash = this.hash;
+            
+            // Notify of link navigation and handle external urls
+            // if not handled elsewhere
+            if (te.mmEditor && te.mmEditor.PreviewLinkNavigation(url, rawHref)) {
+                // it true editor handled the navigation
+                e.preventDefault(); 
+                return false;
+            }
+                       
+            if (hash) {                
+                var sel = "a[name='" + hash.substr(1) + "'],#"+ hash.substr(1);                                          
+                var $el = $(sel);                
+                $("html,body").scrollTop($el.offset().top - 100);
+                return false;
+            }
+        });
 });
 
-$(document).on("contextmenu", function () {
-    // inside of WebBrowser control don't show context menu
-    return navigator.userAgent.indexOf("Trident") > -1 ? false : true;
-});
+$(document).on("contextmenu",
+    function() {
+        te.mmEditor.previewContextMenu({ Top: 1, Left: 1 });
+
+        // inside of WebBrowser control don't show context menu
+        return navigator.userAgent.indexOf("Trident") > -1 ? false : true;
+    });
 
 window.ondrop = function (event) {
     // don't allow dropping here - we can't get full file info
@@ -39,19 +70,23 @@ window.ondragover = function (event) {
     return false;
 }
 
-var scroll = debounce(function (event) {    
+var scroll = debounce(function (event) {
+
     if (!te.mmEditor || !te.isPreviewEditorSync) return;
 
     // prevent repositioning editor scroll sync 
-    // when selecting line in editor (w/ two way sync)
+    // when selecting line in editor (w/ two way sync)    
+    // te.codeScrolled is set in scrollToPragmaLines so that we don't
+    // re-navigate
     var t = new Date().getTime();
-    
-    if (te.codeScrolled > t - 250)
+    if (te.codeScrolled > t - 970)
         return;
 
-    te.codeScrolled = t;
-        
-    var st = $(window).scrollTop();
+    var st = $(window).scrollTop();    
+    if (st < 3) {
+        te.mmEditor.gotoLine(0, true);
+        return;
+    }
 
     var winTop = st + 100;
     var $lines = $("[id*='pragma-line-']");
@@ -61,73 +96,200 @@ var scroll = debounce(function (event) {
 
     var id = null;
     for (var i = 0; i < $lines.length; i++) {
-        
+
         if ($($lines[i]).position().top >= winTop) {
             id = $lines[i].id;
             break;
-        }        
+        }
     }
     if (!id)
         return;
 
     id = id.replace("pragma-line-", "");
-    
-    te.mmEditor.GotoLine((id * 1) - 1);
+
+    var line = (id * 1) - 1;
+    te.mmEditor.gotoLine(line, true);
+
 },100);
 window.onscroll = scroll;
 
+function highlightCode(lineno) {    
 
-
-
-function highlightCode() {
-    $("pre code")
-        .each(function (i, block) {
-            hljs.highlightBlock(block);
-        });
-}
-
-function updateDocumentContent(html) {    
-    te.isPreviewEditorSync = te.mmEditor.IsPreviewToEditorSync();    
-    $("#MainContent").html(html);
-    highlightCode();
-}
-
-function scrollToPragmaLine(lineno) {
-    //status("line:  " + lineno);
-    if (lineno < 0) return;
+    var pres = document.querySelectorAll("pre>code");   
     
-    setTimeout(function () {
-        try {
-            var $el = $("#pragma-line-" + lineno);
+    // Try to find lineno in doc - if lineno is passed
+    // and render only those plus padding above and below
+    var linePos = 0;    
+    if (lineno && pres.length > 200) {
+        var $el = $("#pragma-line-" + lineno);
+        if ($el.length < 1) {            
+            for (var j = 0; j < 10; j++) {
+                if (lineno - j < 0)
+                    break;
+                var $el = $("#pragma-line-" + (lineno - j) );
+                if ($el.length > 0)
+                    break;
+            }            
             if ($el.length < 1) {
-                var origLine = lineno;
-                for (var i = 0; i < 3; i++) {
-                    lineno++;
-                    $el = $("#pragma-line-" + lineno);
+                for (var k = 0; k < 10; k++) {
+                    var $el = $("#pragma-line-" + (lineno + k) );
                     if ($el.length > 0)
                         break;
                 }
-                if ($el.length < 1) {
-                    lineno = origLine;
-                    for (var i = 0; i < 3; i++) {
-                        lineno--;
-                        $el = $("#pragma-line-" + lineno);
-                        if ($el.length > 0)
-                            break;
-                    }
-                }
-                if ($el.length < 1)
-                    return;
             }
-
-            te.codeScrolled = new Date().getTime();
-            $("html").scrollTop($el.offset().top - 100);
-
-            $el.addClass("line-highlight");
-            setTimeout(function() { $el.removeClass("line-highlight"); }, 1200);
+        }        
+        if ($el.length > 0) {
+            linePos = $el.position().top;
         }
-        catch(ex) {  }
-    },80);
+    }
+    //console.log("Line Pos:" + linePos + " " + lineno + " " + $el);
+    
+    for (var i = 0; i < pres.length; i++) {
+        var block = pres[i];
+        var $code = $(block);
+        
+        // too many code blocks to render or text/plain styles - just style        
+        if ((pres.length > 400) ||
+            $code.hasClass("language-text") ||
+            $code.hasClass("language-plain")) {
+                $code.addClass("hljs");
+                continue;
+        }
+
+        // render only matched lines that are in viewport + padding
+        if (linePos > 0) {
+            var top = $code.position().top;
+
+            if (top < linePos - 2000) {
+                //console.log("Skipping smaller: " + top, linePos);
+                //$code.addClass("hljs");
+                continue;
+            }
+            if (top > linePos + 2000) {
+                //console.log("Breaking larger: " + top, linePos);
+                //$code.addClass("hljs");                
+                break;
+            }
+        }
+
+        hljs.highlightBlock(block);
+
+        // This is better for perf but makes the preview jumpy
+        //setTimeout(function(bl) {
+        //    hljs.highlightBlock(bl);
+        //}.bind(this, block));
+    }
+}
+
+// this works, but async updates of code blocks is too jumpy
+//function highlightCodeWebWorker() {
+//    var script = document.getElementById("PreviewScript");
+
+//    if (!script) {
+//        alert('PReviewScript tag not found');
+//        return;
+//    }
+
+//    script = script.src.replace("/preview.js", "/highlightJsWorker.js");
+//    console.log(script);
+    
+
+//    $("pre code")
+//        .each(function (i, block) {
+//            var $block = $(block);
+//            var code = $block.text().trimEnd();
+           
+//            console.log("worker loaded", worker);            
+
+//            var worker = new Worker(script);
+//            worker.onmessage = function (event) {                
+//                var result = event.data;
+//                console.log("Result: ", result.value);
+//                $block[0].outerHTML =
+//                    '<code class="language-javascript" id="pragma-line-8">' + result.value + '</code>'; //html( result.value );
+
+//                worker.terminate();
+//                console.log("done in web worker response");
+//            };
+//            var lang = $block.attr("class");
+//            if (lang)
+//                lang = lang.replace("language-", "");
+
+//            var d = {
+//                code: code,
+//                lang: lang,
+//                script: script.replace("/highlightJsWorker.js", "/highlightjs/highlight.pack.js")
+//            };            
+//            worker.postMessage(d);
+//            console.log("PostMessage called", d);
+//        });
+//}
+
+function updateDocumentContent(html, lineno) {
+  //console.log('update document content');
+  te.isPreviewEditorSync = te.mmEditor.isPreviewToEditorSync();
+  // console.log("Assigning html before Timeout " + new Date().getTime());
+
+  var el = document.getElementById("MainContent");
+  if (!el)
+    return;
+  el.innerHTML = html;
+
+  highlightCode(lineno); 
+ 
+  // Raise a previewUpdated event
+  var event = document.createEvent("Event");
+  event.initEvent("previewUpdated", false, true);
+
+  event.target = el;
+  event.currentTarget = el;
+  document.dispatchEvent(event);
+}
+
+function scrollToPragmaLine(lineno) {
+  if (typeof lineno !== "number" || lineno < 0) return;
+  setTimeout(function() {
+      if (lineno < 3) {
+        $("html").scrollTop(0);
+        return;
+      }
+
+      try {
+        var $el = $("#pragma-line-" + lineno);
+        if ($el.length < 1) {
+          var origLine = lineno;
+
+          // try forward with 3 lines
+          for (var i = 0; i < 3; i++) {
+            lineno++;
+            $el = $("#pragma-line-" + lineno);
+            if ($el.length > 0)
+              break;
+          }
+          // try backwards with 3 lines
+          if ($el.length < 1) {
+            lineno = origLine;
+            for (var i = 0; i < 3; i++) {
+              lineno--;
+              $el = $("#pragma-line-" + lineno);
+              if ($el.length > 0)
+                break;
+            }
+          }
+          if ($el.length < 1)
+            return;
+        }
+
+        $el.addClass("line-highlight");
+        setTimeout(function() { $el.removeClass("line-highlight"); }, 1800);
+
+        te.codeScrolled = new Date().getTime();
+        if (lineno > 3)
+          $("html").scrollTop($el.offset().top - 150);
+      } catch (ex) {
+      }
+    },
+    20);
 }
 
 function status(msg,append) {
@@ -169,7 +331,7 @@ window.onerror = function windowError(message, filename, lineno, colno, error) {
     if (isDebug)
         status(msg);
 
-    console.log(msg);
+    console.log("Error: " + msg);
     
     // don't let errors trigger browser window
     return true;
@@ -189,4 +351,11 @@ function debounce(func, wait, immediate) {
         if (callNow)
             func.apply(context, args);
     };
+}; 
+
+String.prototype.trimEnd = function (c) {
+    if (c)
+        return this.replace(new RegExp(c.escapeRegExp() + "*$"), '');
+    return this.replace(/\s+$/, '');
 };
+

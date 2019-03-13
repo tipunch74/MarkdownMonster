@@ -37,11 +37,13 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Media;
 using FontAwesome.WPF;
 using MarkdownMonster;
 using MarkdownMonster.AddIns;
 using MarkdownMonster.Windows;
 using Westwind.Utilities;
+
 
 namespace SnagItAddin
 {
@@ -58,9 +60,18 @@ namespace SnagItAddin
             var menuItem = new AddInMenuItem(this)
             {
                 Caption = "Screen Capture",
-                FontawesomeIcon = FontAwesomeIcon.Camera
+                FontawesomeIcon = FontAwesomeIcon.Camera,
+                KeyboardShortcut = ScreenCaptureConfiguration.Current.KeyboardShortcut
             };
             MenuItems.Add(menuItem);
+
+          
+            try
+            {
+                menuItem.IconImageSource = new ImageSourceConverter()
+                        .ConvertFromString("pack://application:,,,/ScreenCaptureAddin;component/icon_22.png") as ImageSource;
+            }
+            catch { }
         }
 
         public override void OnExecute(object sender)
@@ -100,12 +111,15 @@ namespace SnagItAddin
             SnagIt.ActiveForm = Model.Window;
 
             var editor = Model.Window.GetActiveMarkdownEditor();
+            if (editor == null)
+                return;
 
             SnagIt.CapturePath = editor?.MarkdownDocument.Filename;
             SnagIt.CapturePath = !string.IsNullOrEmpty(SnagIt.CapturePath) && SnagIt.CapturePath != "untitled" ? 
                 Path.GetDirectoryName(SnagIt.CapturePath) :
-                mmApp.Configuration.LastImageFolder;
+                editor.MarkdownDocument.LastImageFolder;
 
+            
 
             string capturedFile = SnagIt.CaptureImageToFile();
             if (string.IsNullOrEmpty(capturedFile) || !File.Exists(capturedFile))
@@ -119,12 +133,12 @@ namespace SnagItAddin
             if (relPath.Contains(":\\"))
                 relPath = "file:///" + relPath.Replace("\\", "/");
 
-            string replaceText = "![](" + relPath + ")";
+            string replaceText = "![](" + relPath.Replace(" ","%20") + ")";
 
-            mmApp.Configuration.LastImageFolder = SnagIt.CapturePath;
+            editor.MarkdownDocument.LastImageFolder = SnagIt.CapturePath;
 
             // Push the new text into the Editor's Selection
-            SetSelection(replaceText);
+            editor.SetSelectionAndFocus(replaceText);
         }
 
         private void ExecuteApplicationFormCapture()
@@ -175,13 +189,11 @@ namespace SnagItAddin
             if (relPath.Contains(":\\")) // full path
                 relPath = "file:///" + relPath;
 
-            string replaceText = "![](" + relPath + ")";
+            string replaceText = "![](" + relPath.Replace(" ","%20") + ")";
 
             // Push the new text into the Editor's Selection
-            SetSelection(replaceText);
-            Model.ActiveEditor.SetEditorFocus();
-            Model.Window.PreviewMarkdown(Model.ActiveEditor, true);
-
+            Model.ActiveEditor.SetSelectionAndFocus(replaceText);            
+            Model.Window.PreviewMarkdownAsync(Model.ActiveEditor,true);
         }
 
 #if false

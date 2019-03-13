@@ -32,7 +32,6 @@
 #endregion
 using System;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -43,9 +42,14 @@ using System.Windows.Threading;
 using Newtonsoft.Json;
 using Westwind.Utilities;
 using System.Linq;
+using System.Security;
+using MarkdownMonster.RenderExtensions;
 
 namespace MarkdownMonster
 {
+    using System.Diagnostics;
+    using AddIns;
+
     /// <summary>
     /// Class that wraps the Active Markdown document used in the
     /// editor.
@@ -54,6 +58,8 @@ namespace MarkdownMonster
     [ComVisible(true)]
     public class MarkdownDocument : INotifyPropertyChanged
     {
+        private const string ENCRYPTION_PREFIX = "__ENCRYPTED__";
+
         /// <summary>
         /// Name of the Markdown file. If this is a new file the file is 
         /// named 'untitled'
@@ -67,19 +73,22 @@ namespace MarkdownMonster
                 _filename = value;
                 OnPropertyChanged();                
                 OnPropertyChanged(nameof(FilenameWithIndicator));
+                OnPropertyChanged(nameof(FilenamePathWithIndicator));
                 OnPropertyChanged(nameof(HtmlRenderFilename));
+                OnPropertyChanged(nameof(IsDirty));
             }
         }
         private string _filename;
 
+
+        /// <summary>
+        /// Holds the disk file Crc of the document. This value is
+        /// used to determine if the document on disk has changed when
+        /// activating a document after having navigated off and when
+        /// saving.
+        /// </summary>
         [JsonIgnore]
         public string FileCrc { get; set; }
-
-
-        ///// <summary>
-        ///// Markdown style used on this document. Not used at the moment
-        ///// </summary>
-        ////public MarkdownStyles MarkdownStyle = MarkdownStyles.GitHub;
 
 
         /// <summary>
@@ -91,7 +100,11 @@ namespace MarkdownMonster
         {
             get
             {
-                return Path.GetFileName(Filename) + (IsDirty ? "*" : "");                
+                var fname = Filename;
+                if (string.IsNullOrEmpty(Filename))
+                    fname = "Untitled";
+
+                return Path.GetFileName(fname) + (IsDirty ? "*" : "");                
             }
         }
 
@@ -105,14 +118,16 @@ namespace MarkdownMonster
         {
             get
             {
-                if (Filename == "untitled")
+                if (string.IsNullOrEmpty(Filename) || IsUntitled)
                     return FilenameWithIndicator;
 
                 string path = Path.GetFileName(Path.GetDirectoryName(Filename));
 
-                return Path.GetFileName(Filename) + "  –  " + path  + (IsDirty ? "*" : ""); 
+                return Path.GetFileName(Filename) + (IsDirty ? "*" : "") + "  –  " + path ; 
             }
         }
+
+        [JsonIgnore] public bool IsUntitled => Filename.Equals("untitled", StringComparison.InvariantCultureIgnoreCase);
 
         /// <summary>
         /// Name of the auto save backup file
@@ -122,6 +137,10 @@ namespace MarkdownMonster
         {
             get
             {
+
+                if (string.IsNullOrEmpty(Filename))
+                    return Filename;
+
                 return Path.Combine(
                     Path.GetDirectoryName(Filename),
                     Path.GetFileName(Filename) + ".saved.bak");
@@ -160,9 +179,17 @@ namespace MarkdownMonster
 
 
                     // Front Matter Title
-                    if (lines.Length > 2 && lines[0] == "---")
+                    if (lines.Length > 2 && (lines[0] == "---" || lines[0] == "..."))
                     {
-                        var block = mmFileUtils.ExtractString(CurrentText, "---", "---", returnDelimiters: true);
+                        var start = lines[0];
+                        string end = "---";
+
+                        var endBlock1 = CurrentText.IndexOf("---", 3);
+                        var endBlock2 = CurrentText.IndexOf("...", 3);
+                        if (endBlock2 > -1 && (endBlock2 == -1 || endBlock2 < endBlock1))
+                            end = "...";
+
+                        var block = StringUtils.ExtractString(CurrentText, start, end, returnDelimiters: true);
                         if (!string.IsNullOrEmpty(block))
                         {
                             title = StringUtils.ExtractString(block, "title: ", "\n").Trim();
@@ -182,22 +209,49 @@ namespace MarkdownMonster
             }
         }
 
+        /// <summary>
+        /// Determines whether documents are automatically saved in
+        /// the background as soon as changes are made and you stop
+        /// typiing for a second. This setting takes precendence over
+        /// AutoSaveBackups.
+        /// 
+        /// Defaults to Configuration.AutoSaveDocuments
+        /// </summary>
         [JsonIgnore]
         public bool AutoSaveDocuments { get; set; }
 
         /// <summary>
         /// Determines whether backups are automatically saved
+        /// 
+        /// Defaults to Configuration.AutoSaveBackups
         /// </summary>
         [JsonIgnore]
         public bool AutoSaveBackups { get; set; }
 
+
+        /// <summary>
+        /// Internal property used to identify whether scripts are processed
+        /// </summary>
+        [JsonIgnore]
+        public bool ProcessScripts { get; set; }
+
+        /// <summary>
+        /// Extra HTML document headers that get get added to the document
+        /// in the `head`section of the HTML document.
+        /// </summary>
+        [JsonIgnore]
+        public string ExtraHtmlHeaders { get; set; }
+
+        /// <summary>
+        /// Document encoding used when writing the document to disk.
+        /// Default: UTF-8 without a BOM
+        /// </summary>
         [JsonIgnore]
         public Encoding Encoding
         {
             get { return _encoding; }
             set { _encoding = value; }
         }
-
         private Encoding _encoding = Encoding.UTF8;
 
         /// <summary>
@@ -213,10 +267,14 @@ namespace MarkdownMonster
                 if (value != _IsDirty)
                 {
                     _IsDirty = value;
+
                     IsDirtyChanged?.Invoke(value);
-                    OnPropertyChanged(nameof(IsDirty));
-                    OnPropertyChanged(nameof(FilenameWithIndicator));                    
-                }
+
+                    OnPropertyChanged(nameof(FilenameWithIndicator));
+                    OnPropertyChanged(nameof(FilenamePathWithIndicator));
+                    OnPropertyChanged(nameof(IsDirty));                    
+                }                
+                
             }
         }
         private bool _IsDirty;
@@ -237,6 +295,7 @@ namespace MarkdownMonster
         }
         private bool _isActive = false;
 
+     
         /// <summary>
         /// This is the filename used when rendering this document to HTML
         /// </summary>
@@ -263,18 +322,17 @@ namespace MarkdownMonster
             }
         }
 
-        /// <summary>
-        /// Event fired when 
-        /// </summary>
-        public event Action<bool> IsDirtyChanged;
 
         /// <summary>
         /// Holds the last preview window browser scroll position so it can be restored
         /// when refreshing the preview window.
         /// </summary>
-        public int LastBrowserScrollPosition { get; set; }
+        public int LastEditorLineNumber { get; set; }
 
-        
+        /// <summary>
+        /// The last Image Folder used for this document
+        /// </summary>
+        public string LastImageFolder { get; set; }
 
         /// <summary>
         /// Holds the actively edited Markdown text
@@ -294,17 +352,99 @@ namespace MarkdownMonster
         }
         private string _currentText;
 
+        
+        /// <summary>
+        /// Holds the username and password
+        /// </summary>
+        [JsonIgnore]
+        public SecureString Password
+        {
+            get { return _password; }
+            set
+            {
+                if (_password == value) return;
+                _password = value;                
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsEncrypted));
+            }
+        }
+        private SecureString _password;
+
+
+        /// <summary>
+        /// Determines whether the file is encrypted
+        /// </summary>
+        [JsonIgnore]        
+        public bool IsEncrypted => _password != null;
+
+        /// <summary>
+        /// The original text of the document since the last save
+        /// operation. Updated whenever a document is saved.
+        /// </summary>
         [JsonIgnore]
         public string OriginalText { get; set; }
 
+        /// <summary>
+        /// Window dispatcher to ensure we're synchronizing in
+        /// the right context always.
+        /// </summary>
         [JsonIgnore]
         public Dispatcher Dispatcher { get; set; }
+
+
+        #region Events and Notifications
+
+        /// <summary>
+        /// Event fired when the dirty changed of the document changes
+        /// </summary>
+        public event Action<bool> IsDirtyChanged;
+
+
+        /// <summary>
+        /// Event that fires after the document has been rendered
+        /// Parameters:
+        /// * Rendered Html
+        /// * Original Markdown
+        ///
+        /// You return:
+        /// * Updated (or unaltered) HTML 
+        /// </summary>
+        public event Func<string, string, string> DocumentRendered;
+
+
+        /// <summary>
+        /// Event that fires just before the document is rendered. It's
+        /// passed the Markdown text **before** it is converted to HTML
+        /// so you can intercept and modify the markdown before rendering.
+        ///
+        /// Return back the final markdown.
+        /// </summary>
+        public event Func<string, string> BeforeDocumentRendered;
+
+        private void OnBeforeDocumentRendered(ref string  markdown)
+        {
+            RenderExtensionsManager.Current.ProcessAllBeforeRenderExtensions(ref markdown, this);
+
+            if (BeforeDocumentRendered!=null)
+                markdown = BeforeDocumentRendered(markdown);            
+        }
+
+        private void OnDocumentRendered(ref string html, ref string markdown)
+        {
+            RenderExtensionsManager.Current.ProcessAllExtensions(ref html, markdown, this);
+
+            if (DocumentRendered != null)
+                html = DocumentRendered(html, markdown);
+        }
+
+        #endregion
 
         #region Read and Write Files
 
         public MarkdownDocument()
         {
-            
+            AutoSaveBackups = mmApp.Configuration.AutoSaveBackups;
+            AutoSaveDocuments = mmApp.Configuration.AutoSaveDocuments;
         }
 
         /// <summary>
@@ -312,29 +452,49 @@ namespace MarkdownMonster
         /// </summary>
         /// <param name="filename"></param>
         /// <returns></returns>
-        public bool Load(string filename = null)
+        public bool Load(string filename = null, SecureString password = null)
         {
             if (string.IsNullOrEmpty(filename))
                 filename = Filename;
 
+            if (password == null)
+                password = Password;
+            else
+                Password = password;
+            
             if (!File.Exists(filename))
             {
                 FileCrc = null;
                 return false;
             }
 
+            Filename = filename;
             UpdateCrc();
             GetFileEncoding();
             
             try
             {
                 CurrentText = File.ReadAllText(filename,Encoding);
+
+                if (password != null)
+                {
+                    if (CurrentText.StartsWith(ENCRYPTION_PREFIX))
+                    {
+                        string encrypted = CurrentText.Substring(ENCRYPTION_PREFIX.Length);
+                        CurrentText = Encryption.DecryptString(encrypted, password.GetString());
+                        if (string.IsNullOrEmpty(CurrentText))
+                            return false;
+                    }
+                }
+
                 OriginalText = CurrentText;
                 AutoSaveBackups = mmApp.Configuration.AutoSaveBackups;
                 AutoSaveDocuments = mmApp.Configuration.AutoSaveDocuments;
+                ProcessScripts = mmApp.Configuration.MarkdownOptions.AllowRenderScriptTags;
+                IsDirty = false;
             }
             catch
-            {
+            {                
                 return false;
             }
             
@@ -350,7 +510,7 @@ namespace MarkdownMonster
         /// <param name="filename">filename to save (optional)</param>
         /// <param name="noBackupFileCleanup">if true doesn't delete backup files that might exist</param>
         /// <returns>true or false (no exceptions on failure)</returns>
-        public bool Save(string filename = null, bool noBackupFileCleanup = false)
+        public bool Save(string filename = null, bool noBackupFileCleanup = false, SecureString password = null)
         {
             if (string.IsNullOrEmpty(filename))
                 filename = Filename;
@@ -361,15 +521,31 @@ namespace MarkdownMonster
                 {
                     _IsSaving = true;
 
-                    File.WriteAllText(filename, CurrentText, Encoding);
+                    string fileText = CurrentText;
+
+                    password = password ?? Password;
+
+                    if (password != null)
+                    {
+                        fileText = ENCRYPTION_PREFIX + Encryption.EncryptString(fileText, password.GetString());
+                        if (Password == null)
+                            Password = password;
+                    }
+
+                    File.WriteAllText(filename, fileText, Encoding);
                     OriginalText = CurrentText;
+                    if (Dispatcher != null)
+                        // need dispatcher in order to handle the 
+                        // hooked up OnPropertyChanged events that fire
+                        // on the UI which otherwise fail.
+                        Dispatcher.InvokeAsync(() => { IsDirty = false; });
+                    else
+                        IsDirty = false;
 
                     UpdateCrc(filename);
 
                     if (!noBackupFileCleanup)
                         CleanupBackupFile();
-
-                    IsDirty = false;
 
                     _IsSaving = false;
                 }                
@@ -382,18 +558,23 @@ namespace MarkdownMonster
             return true;
         }
 
-
         /// <summary>
         /// Cleans up after the file is closed by deleting
         /// the HTML render file.
         /// </summary>
         public void Close()
         {
-            if (File.Exists(HtmlRenderFilename))
-                File.Delete(HtmlRenderFilename);
-
+            //if (File.Exists(HtmlRenderFilename))
+            //{
+            //    try
+            //    {
+            //        File.Delete(HtmlRenderFilename);
+            //    }
+            //    catch { /* ignore */ }
+            //}
             CleanupBackupFile();
         }
+
 
         /// <summary>
         /// Writes the file with a retry
@@ -410,8 +591,8 @@ namespace MarkdownMonster
             {
                 try
                 {
-                    File.WriteAllText(filename, html, Encoding.UTF8);
-                    written = 10;
+                    File.WriteAllText(filename, html, Encoding.UTF8);                    
+                    written = 10;                    
                 }              
                 catch(Exception ex)
                 {
@@ -421,8 +602,7 @@ namespace MarkdownMonster
                     if (written == 4)
                     {
                         mmApp.Log("Warning: Unable to write output file: " + filename + "\r\n" + ex.Message);
-                        return false;
-                        throw new ApplicationException("Unable to write output file:  " + filename + "\r\n" + ex.Message);
+                        return false;                    
                     }
                 }
             }
@@ -443,7 +623,7 @@ namespace MarkdownMonster
             {
                 if (_IsSaving)
                     return;
-
+    
                 Task.Run(() =>
                 {                    
                     filename = Filename;
@@ -451,27 +631,7 @@ namespace MarkdownMonster
                     if (filename == "untitled")
                         return;
 
-                    try
-                    {
-                        lock (_SaveLock)
-                        {
-                            File.WriteAllText(filename, CurrentText, Encoding);
-                            OriginalText = CurrentText;
-                            UpdateCrc(filename);
-
-                            if (Dispatcher != null)
-                                // need dispatcher in order to handle the 
-                                // hooked up OnPropertyChanged events that fire
-                                // on the UI which otherwise fail.
-                                Dispatcher.InvokeAsync(() => { IsDirty = false; });
-                            else
-                                    IsDirty = false;
-                        }
-                    }
-                    catch
-                    {
-                        /* ignore save error, write next cycle */
-                    }
+                    Save(filename,true);                    
                 });                
             }
             else if (AutoSaveBackups)
@@ -482,11 +642,14 @@ namespace MarkdownMonster
                     if (string.IsNullOrEmpty(filename))
                         filename = BackupFilename;
 
-                    if (Filename == "untitled" || Filename.Contains("saved.bak"))
+                    if (Filename.Contains("saved.bak"))
                         return;
 
+                    if (Filename == "untitled")
+                        filename = Path.Combine(Path.GetTempPath(), "untitled.saved.md");
+          
                     try
-                    {
+                    {                        
                         File.WriteAllText(filename, CurrentText, Encoding);
                     }
                     catch
@@ -507,9 +670,9 @@ namespace MarkdownMonster
             if (string.IsNullOrEmpty(filename))
             {
                 if (Filename == "untitled")
-                    return;
-
-                filename = BackupFilename;
+                    filename = Path.Combine(Path.GetTempPath(), "untitled.saved.md");
+                else
+                    filename = BackupFilename;
             }
             
             try
@@ -525,12 +688,58 @@ namespace MarkdownMonster
         /// <returns></returns>
         public bool HasBackupFile()
         {
-            return Filename != "untitled" && File.Exists(BackupFilename);
+            string filename = BackupFilename;
+            if (Filename == "untitled")
+                filename = Path.Combine(Path.GetTempPath(), "untitled.saved.md");
+
+            return File.Exists(filename);
         }
 
         #endregion
 
         #region File Information Manipulation
+
+        /// <summary>
+        /// Determines whether the file on disk is encrypted
+        /// </summary>
+        /// <param name="filename">Optional filename - if not specified Filename is used</param>
+        /// <returns></returns>
+        public bool IsFileEncrypted(string filename = null)
+        {
+            filename = filename ?? Filename;
+
+            if (string.IsNullOrEmpty(filename))
+                return false;
+
+            lock (_SaveLock)
+            {
+                try
+                {
+                    using (var fs = new FileStream(Filename, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    {
+                        int count;
+                        var bytes = new char[ENCRYPTION_PREFIX.Length];
+
+                        using (var sr = new StreamReader(fs))
+                        {
+                            count = sr.Read(bytes, 0, bytes.Length);
+                        }
+
+                        if (count == ENCRYPTION_PREFIX.Length)
+                        {
+                            if (new string(bytes) == ENCRYPTION_PREFIX)
+                                return true;
+                        }
+                    }
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// Stores the CRC of the file as currently exists on disk
@@ -609,33 +818,81 @@ namespace MarkdownMonster
             if (string.IsNullOrEmpty(markdown))
                 markdown = CurrentText;
             
-            var parser = MarkdownParserFactory.GetParser(renderLinksAsExternal: renderLinksExternal, usePragmaLines: usePragmaLines, forceLoad: true);            
-            return parser.Parse(markdown, renderLinksExternal);
+            OnBeforeDocumentRendered(ref markdown);            
+            
+            var parser = MarkdownParserFactory.GetParser(usePragmaLines: usePragmaLines,                                                         
+                                                         forceLoad: true, 
+                                                         parserAddinId: mmApp.Configuration.MarkdownOptions.MarkdownParserName);
+
+            // allow override of RenderScriptTags if set
+            var oldAllowScripts = mmApp.Configuration.MarkdownOptions.AllowRenderScriptTags;
+            if (ProcessScripts)            
+                mmApp.Configuration.MarkdownOptions.AllowRenderScriptTags = false;
+            
+            var html = parser.Parse(markdown);
+            
+            mmApp.Configuration.MarkdownOptions.AllowRenderScriptTags = oldAllowScripts;
+
+
+            OnDocumentRendered(ref html, ref markdown);
+            
+
+            if (!string.IsNullOrEmpty(html) && !UnlockKey.IsRegistered() && mmApp.Configuration.ApplicationUpdates.AccessCount > 20)
+            {
+                html += @"
+<div style=""margin-top: 30px;margin-bottom: 10px;font-size: 0.8em;border-top: 1px solid #eee;padding-top: 8px;opacity: 0.75;""
+     title=""This message doesn't display in the registered version of Markdown Monster."">
+    <img src=""https://markdownmonster.west-wind.com/favicon.png""
+         style=""height: 20px;float: left; margin-right: 10px;""/>
+    created with the free version of
+    <a href=""https://markdownmonster.west-wind.com"" 
+       target=""top"">Markdown Monster</a> 
+</div>
+";
+            }
+
+            
+
+            return html;
         }
 
         /// <summary>
-        /// Renders the HTML to a file with a related template
+        /// Renders markdown from the current document using the appropriate Theme
+        /// Template and writing an output file. Options allow customization and 
+        /// can avoid writing out a file.
         /// </summary>
         /// <param name="markdown"></param>
         /// <param name="filename"></param>
         /// <param name="renderLinksExternal"></param>
+        /// <param name="theme">The theme to use to render this topic</param>
+        /// <param name="usePragmaLines"></param>
+        /// <param name="noFileWrite"></param>
         /// <returns></returns>
-        public string RenderHtmlToFile(string markdown = null, string filename = null, bool renderLinksExternal = false, string theme = null, bool usePragmaLines = false)
+        public string RenderHtmlToFile(string markdown = null, string filename = null,
+                                       bool renderLinksExternal = false, string theme = null,
+                                       bool usePragmaLines = false,
+                                       bool noFileWrite = false,
+                                       bool removeBaseTag = false)
         {
+            ExtraHtmlHeaders = null;
+
+            if (string.IsNullOrEmpty(markdown))
+                markdown = CurrentText;
+           
             string markdownHtml = RenderHtml(markdown, renderLinksExternal, usePragmaLines);
 
             if (string.IsNullOrEmpty(filename))
                 filename = HtmlRenderFilename;
 
             if (string.IsNullOrEmpty(theme))
-                theme = mmApp.Configuration.RenderTheme;
+                theme = mmApp.Configuration.PreviewTheme;
 
             var themePath = Path.Combine(Environment.CurrentDirectory, "PreviewThemes\\" + theme);
             var docPath = Path.GetDirectoryName(Filename) + "\\";
 
             if (!Directory.Exists(themePath))
             {
-                mmApp.Configuration.RenderTheme = "Dharkan";
+                mmApp.Configuration.PreviewTheme = "Dharkan";
                 themePath = Path.Combine(Environment.CurrentDirectory, "PreviewThemes\\Dharkan");
                 theme = "Dharkan";
             }
@@ -645,28 +902,53 @@ namespace MarkdownMonster
             {
                 themeHtml = File.ReadAllText(themePath + "\\theme.html");
                 themePath = themePath + "\\";
+
+                if (removeBaseTag)
+                {
+                    // strip <base> tag
+                    var extracted = StringUtils.ExtractString(themeHtml, "<base href=\"", "/>", false, false, true);
+                    if (!string.IsNullOrEmpty(extracted))
+                        themeHtml = themeHtml.Replace(extracted, "");
+                }                
             }
             catch (FileNotFoundException)
             {
                 // reset to default
-                mmApp.Configuration.RenderTheme = "Dharkan";
+                mmApp.Configuration.PreviewTheme = "Dharkan";
                 themeHtml = "<html><body><h3>Invalid Theme or missing files. Resetting to Dharkan.</h3></body></html>";
             }
-            var html = themeHtml.Replace("{$themePath}", themePath)
-                .Replace("{$docPath}", docPath)
-                .Replace("{$markdownHtml}", markdownHtml);
 
-            if (!WriteFile(filename, html))
-                return null;
+            var html = themeHtml.Replace("{$themePath}", "file:///" + themePath)
+                .Replace("{$docPath}", "file:///" + docPath)
+                .Replace("{$markdownHtml}", markdownHtml)
+                .Replace("{$markdown}", markdown ?? CurrentText)
+                .Replace("{$extraHeaders}", ExtraHtmlHeaders);
+
+            html = AddinManager.Current.RaiseOnModifyPreviewHtml( html, markdownHtml );
+
+            if (!noFileWrite)
+            {
+                if (!WriteFile(filename, html))
+                    return null;
+            }
 
             return html;
+        }
+
+        /// <summary>
+        /// Adds extra headers that are embedded into the HTML output file's head tag
+        /// </summary>
+        /// <param name="extraHeaderText"></param>
+        public void AddExtraHeaders(string extraHeaderText)
+        {
+            ExtraHtmlHeaders += ExtraHtmlHeaders + extraHeaderText + "\r\n";
         }
         #endregion
 
         #region INotifyPropertyChanged
         public event PropertyChangedEventHandler PropertyChanged;
-        
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+
+        public virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
@@ -684,7 +966,35 @@ namespace MarkdownMonster
 
             return Path.GetFileName(Filename);
         }
-
-        
     }
+
+    static class SecureStringExtensions
+    {
+        public static string GetString(
+            this SecureString source)
+        {
+            string result = null;
+            int length = source.Length;
+            IntPtr pointer = IntPtr.Zero;
+            char[] chars = new char[length];
+
+            try
+            {
+                pointer = Marshal.SecureStringToBSTR(source);
+                Marshal.Copy(pointer, chars, 0, length);
+
+                result = string.Join("", chars);
+            }
+            finally
+            {
+                if (pointer != IntPtr.Zero)
+                {
+                    Marshal.ZeroFreeBSTR(pointer);
+                }
+            }
+
+            return result;
+        }
+    }
+    
 }

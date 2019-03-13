@@ -1,13 +1,23 @@
 var editorSettings = {
   "dictionary": "EN_US",
   "enableSpellChecking": true,
+  "spellcheckerErrorLimit": 150, // limit of errors per screen before considered wrong language
+  "theme": "vscodedark",
   "font": "Consolas",
   "fontSize": 17,
+  "lineHeight": 1.3,
+  "padding": 15,
+  "maxWidth": 0,
   "highlightActiveLine": true,
-  "isDebug": false,
+  "wrapText": true,
   "showLineNumbers": false,
+  "showInvisibles": false,
   "showPrintMargin": false,
-  "tabSpaces": 4,
-  "theme": "twilight",
-  "wrapText": true  
+  "printMargin": 100,
+  "wrapMargin": 0,
+  "keyboardHandler": "ace", 
+  "tabSize": 4,
+  "useSoftTabs": true,
+  "enableBulletAutoCompletion": false,
+  "isDebug": false,
 };

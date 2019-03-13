@@ -36,13 +36,18 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Xml;
 using FontAwesome.WPF;
 using HtmlAgilityPack;
 using WebLogAddin.MetaWebLogApi;
 using MarkdownMonster;
 using MarkdownMonster.AddIns;
+using WebLogAddin.Medium;
 using Westwind.Utilities;
 using File = System.IO.File;
 
@@ -50,26 +55,46 @@ namespace WeblogAddin
 {
     public class WebLogAddin :  MarkdownMonsterAddin, IMarkdownMonsterAddin
     {
-        private Post ActivePost { get; set; } = new Post();
+        public WeblogAddinModel WeblogModel { get; set; } = new WeblogAddinModel();
+
+        public WeblogForm WeblogForm { get; set; }
 
 
         public override void OnApplicationStart()
         {
             base.OnApplicationStart();
 
+            WeblogModel = new WeblogAddinModel()
+            {                
+                Addin = this,                              
+            };
+
             Id = "weblog";
+            Name = "Weblog Publishing Addin";
 
             // Create addin and automatically hook menu events
             var menuItem = new AddInMenuItem(this)
             {
                 Caption = "Weblog Publishing",                
-                FontawesomeIcon = FontAwesomeIcon.Rss
+                FontawesomeIcon = FontAwesomeIcon.Rss,
+                KeyboardShortcut = WeblogAddinConfiguration.Current.KeyboardShortcut
             };
+            try
+            {
+                menuItem.IconImageSource = new ImageSourceConverter()
+                        .ConvertFromString("pack://application:,,,/WeblogAddin;component/icon_22.png") as ImageSource;
+            }
+            catch { }
 
-            // Don't need a configuration dropdown
-            //menuItem.ExecuteConfiguration = null;
 
             MenuItems.Add(menuItem);
+        }
+
+        public override void OnWindowLoaded()
+        {
+            base.OnWindowLoaded();
+
+            AddMainMenuItems();
         }
 
         public override void OnExecute(object sender)
@@ -77,18 +102,20 @@ namespace WeblogAddin
             // read settings on startup
             WeblogAddinConfiguration.Current.Read();
 
-            var form = new WebLogForm()
+            WeblogForm?.Close();
+            WeblogForm = new WeblogForm(WeblogModel)
             {
                 Owner = Model.Window
             };
-            form.Model.AppModel = Model;
-            form.Model.Addin = this;                       
-            form.Show();                       
+            WeblogModel.AppModel = Model;
+            
+            WeblogForm.Show();                       
         }
+
 
         public override bool OnCanExecute(object sender)
         {
-            return Model.IsEditorActive;
+            return Model.IsEditorActive;            
         }
 
         public override void OnExecuteConfiguration(object sender)
@@ -100,17 +127,8 @@ namespace WeblogAddin
 
         public override void OnNotifyAddin(string command, object parameter)
         {
-            if (command == "newweblogpost")
-            {
-                var form = new WebLogForm()
-                {
-                    Owner = Model.Window
-                };
-                form.Model.AppModel = Model;
-                form.Model.Addin = this;
-                form.Show();
-                form.TabControl.SelectedIndex = 1;
-            }            
+            if (command == "newweblogpost")            
+                WeblogFormCommand.Execute("newweblogpost");
         }
 
         #region Post Send Operations
@@ -120,27 +138,65 @@ namespace WeblogAddin
         /// 
         /// </summary>
         /// <returns></returns>
-        public bool SendPost(WeblogTypes type = WeblogTypes.Unknown, bool sendAsDraft = false)
-        {            
+        public async Task<bool> SendPost(WeblogInfo weblogInfo, bool sendAsDraft = false)
+        {
             var editor = Model.ActiveEditor;
             if (editor == null)
                 return false;
 
             var doc = editor.MarkdownDocument;
 
-            ActivePost = new Post()
+            WeblogModel.ActivePost = new Post()
             {
                 DateCreated = DateTime.Now
             };
 
             // start by retrieving the current Markdown from the editor
-            string markdown = editor.GetMarkdown();
+            string markdown = editor.MarkdownDocument.CurrentText;
 
             // Retrieve Meta data from post and clean up the raw markdown
             // so we render without the config data
-            var meta = GetPostConfigFromMarkdown(markdown);
+            var meta = WeblogPostMetadata.GetPostConfigFromMarkdown(markdown, WeblogModel.ActivePost, weblogInfo);
 
             string html = doc.RenderHtml(meta.MarkdownBody, WeblogAddinConfiguration.Current.RenderLinksOpenExternal);
+            WeblogModel.ActivePost.Body = html;
+            WeblogModel.ActivePost.PostId = meta.PostId;
+	        WeblogModel.ActivePost.PostStatus = meta.PostStatus;
+
+            // Custom Field Processing:
+            // Add custom fields from existing post
+            // then add or update our custom fields            
+            var customFields = new Dictionary<string, CustomField>();
+
+            // load existing custom fields from post online if possible
+            if (!string.IsNullOrEmpty(meta.PostId))
+            {
+                var existingPost = GetPost(meta.PostId, weblogInfo);
+                if (existingPost != null && meta.CustomFields != null && existingPost.CustomFields != null)
+                    customFields = existingPost.CustomFields
+                        .ToDictionary(cf => cf.Key, cf => cf);
+            }
+            // add custom fields from Weblog configuration
+            if (weblogInfo.CustomFields != null)
+            {
+                foreach (var kvp in weblogInfo.CustomFields)
+                {
+                    if (!customFields.ContainsKey(kvp.Key))
+                        AddOrUpdateCustomField(customFields, kvp.Key, kvp.Value);
+                }
+            }
+            // add custom fields from Meta data
+            if (meta.CustomFields != null)
+            {
+                foreach (var kvp in meta.CustomFields)
+                {
+                    AddOrUpdateCustomField(customFields, kvp.Key, kvp.Value.Value);
+                }
+            }
+            if (!string.IsNullOrEmpty(markdown))
+                AddOrUpdateCustomField(customFields, "mt_markdown", markdown);
+
+            WeblogModel.ActivePost.CustomFields = customFields.Values.ToArray();
 
             var config = WeblogAddinConfiguration.Current;
 
@@ -148,124 +204,99 @@ namespace WeblogAddin
             if (kv.Equals(default(KeyValuePair<string, WeblogInfo>)))
             {
                 MessageBox.Show("Invalid Weblog configuration selected.",
-                                "Weblog Posting Failed",
-                                MessageBoxButton.OK, MessageBoxImage.Exclamation);
+                    "Weblog Posting Failed",
+                    MessageBoxButton.OK, MessageBoxImage.Exclamation);
                 return false;
             }
-            WeblogInfo weblogInfo = kv.Value;
+            weblogInfo = kv.Value;
 
+            var type = weblogInfo.Type;
             if (type == WeblogTypes.Unknown)
                 type = weblogInfo.Type;
 
-            MetaWeblogWrapper wrapper;
 
-            if (type == WeblogTypes.MetaWeblogApi)
-                wrapper = new MetaWeblogWrapper(weblogInfo.ApiUrl,
-                    weblogInfo.Username,
-                    weblogInfo.DecryptPassword(weblogInfo.Password),
-                    weblogInfo.BlogId);
-            else
-                wrapper = new WordPressWrapper(weblogInfo.ApiUrl,
-                    weblogInfo.Username,
-                    weblogInfo.DecryptPassword(weblogInfo.Password));
+            string basePath = Path.GetDirectoryName(doc.Filename);
+            string postUrl = null;
 
-
-            string body;
-            try
+            if (type == WeblogTypes.MetaWeblogApi || type == WeblogTypes.Wordpress)
             {
-                body = SendImages(html, doc.Filename, wrapper,meta);
-            }
-            catch (Exception ex)
-            {
-                mmApp.Log($"Error sending images to Weblog at {weblogInfo.ApiUrl}: ", ex);                
-                return false;
-            }
+                MetaWebLogWordpressApiClient client;
+                client = new MetaWebLogWordpressApiClient(weblogInfo);
 
-            if (body == null)
-                return false;
+                // if values are already configured don't overwrite them again
+                client.DontInferFeaturedImage = meta.DontInferFeaturedImage;
+                client.FeaturedImageUrl = meta.FeaturedImageUrl;
+                client.FeatureImageId = meta.FeaturedImageId;
 
-            ActivePost.Body = body;
-            ActivePost.PostID = meta.PostId;            
+                var result = await Task.Run<bool>(() => client.PublishCompletePost(WeblogModel.ActivePost, basePath,
+                    sendAsDraft, markdown));
 
-            var customFields = new List<CustomField>();
-            
-            
-            customFields.Add(
-                new CustomField()
+                //if (!client.PublishCompletePost(WeblogModel.ActivePost, basePath,
+                //    sendAsDraft, markdown))
+                if (!result)
                 {
-                    ID = "mt_markdown",
-                    Key = "mt_markdown",
-                    Value = meta.MarkdownBody
-                });
+                    mmApp.Log($"Error sending post to Weblog at {weblogInfo.ApiUrl}: " + client.ErrorMessage);
+                    MessageBox.Show("Error sending post to Weblog: " + client.ErrorMessage,
+                        mmApp.ApplicationName,
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Exclamation);
+                    return false;
+                }
 
-            if (!string.IsNullOrEmpty(meta.FeaturedImageUrl) || !string.IsNullOrEmpty(meta.FeatureImageId))
-            {
-                var featuredImage = meta.FeaturedImageUrl;
-                if (!string.IsNullOrEmpty(meta.FeatureImageId)) // id takes precedence
-                    featuredImage = meta.FeatureImageId;
-
-                ActivePost.wp_post_thumbnail = featuredImage;
-                customFields.Add(
-                    new CustomField()
-                    {
-                        ID = "wp_post_thumbnail",
-                        Key = "wp_post_thumbnail",
-                        Value = featuredImage
-                    });
+                var post = client.GetPost(WeblogModel.ActivePost.PostId);
+                if (post != null)
+                    postUrl = post.Url;
             }
-            ActivePost.CustomFields = customFields.ToArray();
-
-            bool isNewPost = IsNewPost(ActivePost.PostID);
-            try
+            if (type == WeblogTypes.Medium)
             {
-                if (!isNewPost)
-                    wrapper.EditPost(ActivePost,!sendAsDraft);
-                else
-                    ActivePost.PostID = wrapper.NewPost(ActivePost, !sendAsDraft);
-            }
-            catch (Exception ex)
-            {
-                mmApp.Log($"Error sending post to Weblog at {weblogInfo.ApiUrl}: ", ex);
-                MessageBox.Show($"Error sending post to Weblog: " + ex.Message,
-                    mmApp.ApplicationName,
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Exclamation);
+                var client = new MediumApiClient(weblogInfo);
+                var result = client.PublishCompletePost(WeblogModel.ActivePost, basePath, sendAsDraft);
+                if (result == null)
+                {
+                    mmApp.Log($"Error sending post to Weblog at {weblogInfo.ApiUrl}: " + client.ErrorMessage);
+                    MessageBox.Show($"Error sending post to Weblog: " + client.ErrorMessage,
+                        mmApp.ApplicationName,
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Exclamation);
+                    return false;
+                }
 
-                mmApp.Log(ex);
-                return false;
+                // this is null
+                postUrl = client.PostUrl;                
             }
-
-            meta.PostId = ActivePost.PostID.ToString();
+            
+            meta.PostId = WeblogModel.ActivePost.PostId?.ToString();
 
             // retrieve the raw editor markdown
-            markdown = editor.GetMarkdown();
+            markdown = editor.MarkdownDocument.CurrentText;
             meta.RawMarkdownBody = markdown;
 
             // add the meta configuration to it
-            markdown = SetConfigInMarkdown(meta);
-
+            markdown = meta.SetPostYaml();
+           
             // write it back out to editor
-            editor.SetMarkdown(markdown);
+            editor.SetMarkdown(markdown, updateDirtyFlag: true, keepUndoBuffer: true);
 
-            // preview post
-            if (!string.IsNullOrEmpty(weblogInfo.PreviewUrl))
+            try
             {
-                var url = weblogInfo.PreviewUrl.Replace("{0}", ActivePost.PostID.ToString());
-                ShellUtils.GoUrl(url);
-            }
-            else
-            {
-                try
+                // preview post
+                if (!string.IsNullOrEmpty(weblogInfo.PreviewUrl))
                 {
-                    var postRaw = wrapper.GetPostRaw(ActivePost.PostID);
-                    var link = postRaw.link;
-                    if (!string.IsNullOrEmpty(link) && ( link.StartsWith("http://") || link.StartsWith("https://")) )
-                        ShellUtils.GoUrl(link);
+                    var url = weblogInfo.PreviewUrl.Replace("{0}", WeblogModel.ActivePost.PostId.ToString());
+                    ShellUtils.GoUrl(url);
+                }
+                else
+                {
+                    if (!string.IsNullOrEmpty(postUrl))
+                        ShellUtils.GoUrl(postUrl);
                     else
-                        // just go to the base domain - assume posts are listed there
                         ShellUtils.GoUrl(new Uri(weblogInfo.ApiUrl).GetLeftPart(UriPartial.Authority));
                 }
-                catch { }
+            }
+            catch
+			{ 
+                mmApp.Log("Failed to display Weblog Url after posting: " +
+                          weblogInfo.PreviewUrl ?? postUrl ?? weblogInfo.ApiUrl);
             }
 
             return true;
@@ -273,79 +304,40 @@ namespace WeblogAddin
 
 
         /// <summary>
-        /// Parses each of the images in the document and posts them to the server.
-        /// Updates the HTML with the returned Image Urls
+        /// Returns a Post by Id
         /// </summary>
-        /// <param name="html">HTML that contains images</param>
-        /// <param name="filename">image file name</param>
-        /// <param name="wrapper">blog wrapper instance that sends</param>
-        /// <param name="metaData">metadata containing post info</param>
-        /// <returns>update HTML string for the document with updated images</returns>
-        private string SendImages(string html, string filename, MetaWeblogWrapper wrapper, WeblogPostMetadata metaData)
+        /// <param name="postId"></param>
+        /// <param name="weblogInfo"></param>
+        /// <returns></returns>
+        public Post GetPost(string postId, WeblogInfo weblogInfo)
         {
-            var basePath = Path.GetDirectoryName(filename);
-
-            // base folder name for uploads - just the folder name of the image
-            var baseName = Path.GetFileName(basePath);
-            baseName = mmFileUtils.SafeFilename(baseName).Replace(" ","-");
-
-            var doc = new HtmlDocument();
-            doc.LoadHtml(html);
-            try
+            if (weblogInfo.Type == WeblogTypes.MetaWeblogApi || weblogInfo.Type == WeblogTypes.Wordpress)
             {
-                // send up normalized path images as separate media items
-                var images = doc.DocumentNode.SelectNodes("//img");
-                if (images != null)
-                {                    
-                    foreach (HtmlNode img in images)
-                    {
-                        string imgFile = img.Attributes["src"]?.Value as string;
-                        if (imgFile == null)
-                            continue;
-
-                        if (!imgFile.StartsWith("http://") && !imgFile.StartsWith("https://"))
-                        {
-                            imgFile = Path.Combine(basePath, imgFile.Replace("/", "\\"));
-                            if (File.Exists(imgFile))
-                            {                                
-                                var media = new MediaObject()
-                                {
-                                    Type = mmFileUtils.GetImageMediaTypeFromFilename(imgFile),
-                                    Bits = File.ReadAllBytes(imgFile),
-                                    Name = baseName + "/" + Path.GetFileName(imgFile)
-                                };
-                                var mediaResult = wrapper.NewMediaObject(media);
-                                img.Attributes["src"].Value = mediaResult.URL;
-
-                                // use first image as featured image
-                                if (string.IsNullOrEmpty(metaData.FeaturedImageUrl)) 
-                                    metaData.FeaturedImageUrl = mediaResult.URL;
-                                if (string.IsNullOrWhiteSpace(metaData.FeatureImageId))
-                                    metaData.FeatureImageId = mediaResult.Id;
-
-                            }
-                        }
-                    }
-
-                    html = doc.DocumentNode.OuterHtml;
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Error posting images to Weblog: " + ex.Message,
-                    mmApp.ApplicationName,
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Exclamation);
-                mmApp.Log(ex);
-                return null;
+                MetaWebLogWordpressApiClient client;
+                client = new MetaWebLogWordpressApiClient(weblogInfo);
+                return client.GetPost(postId);
             }
 
-            return html;
+            // Medium doesn't support post retrieval so return null
+            return null;
         }
 
-        #endregion
+        private void AddOrUpdateCustomField(IDictionary<string, CustomField> customFields, string key, string value)
+        {
+            CustomField cf;
+            if (customFields.TryGetValue(key, out cf))
+            {
+                cf.Value = value;
+            }
+            else
+            {
+                customFields.Add(key, new CustomField { Key = key, Value = value });
+            }
+        }
 
-        #region Local Post Creation
+#endregion
+
+#region Local Post Creation
 
         public string NewWeblogPost(WeblogPostMetadata meta)
         {
@@ -354,64 +346,43 @@ namespace WeblogAddin
                 meta = new WeblogPostMetadata()
                 {
                     Title = "Post Title",
+                    MarkdownBody = string.Empty
                 };
             }
 
 
             if (string.IsNullOrEmpty(meta.WeblogName))
                 meta.WeblogName = "Name of registered blog to post to";
-            
 
-            string post =
+            bool hasFrontMatter = meta.MarkdownBody != null &&
+                                  (meta.MarkdownBody.TrimStart().StartsWith("---\n") ||
+                                   meta.MarkdownBody.TrimStart().StartsWith("---\r"));
+            string post;
+
+            if (hasFrontMatter)
+                post = meta.MarkdownBody;
+            else
+                post =
                 $@"# {meta.Title}
 
 {meta.MarkdownBody}
-
-<!-- Post Configuration -->
-<!--
-```xml
-<blogpost>
-<title>{meta.Title}</title>
-<abstract>
-{meta.Abstract}
-</abstract>
-<categories>
-{meta.Categories}
-</categories>
-<isDraft>{meta.IsDraft}</isDraft>
-<featuredImage>{meta.FeaturedImageUrl}</featuredImage>
-<keywords>
-{meta.Keywords}
-</keywords>
-<weblogs>
-<postid>{meta.PostId}</postid>
-<weblog>
-{meta.WeblogName}
-</weblog>
-</weblogs>
-</blogpost>
-```
--->
-<!-- End Post Configuration -->
 ";
+            meta.RawMarkdownBody = post;
+            meta.MarkdownBody = post;
 
-            if (WeblogAddinConfiguration.Current.AddFrontMatterToNewBlogPost)
-            {
-
-                post = String.Format(WeblogAddinConfiguration.Current.FrontMatterTemplate,
-                meta.Title, DateTime.Now) + 
-                post;
-            }
-
+            if(!hasFrontMatter)
+                post = meta.SetPostYaml();
+            
             return post;
         }
 
         public void CreateNewPostOnDisk(string title, string postFilename, string weblogName)
         {
-            string filename = mmFileUtils.SafeFilename(postFilename);
-            string titleFilename = mmFileUtils.SafeFilename(title);
+            string filename = FileUtils.SafeFilename(postFilename);
+            string titleFilename = FileUtils.SafeFilename(title);
+            titleFilename = titleFilename.Replace(" ", "-").Replace("'", "").Replace("&","and");
 
-            var folder = Path.Combine(WeblogAddinConfiguration.Current.PostsFolder,DateTime.Now.Year + "-" + DateTime.Now.Month.ToString("00"), titleFilename.Replace(" ","-"));
+            var folder = Path.Combine(WeblogAddinConfiguration.Current.PostsFolder,DateTime.Now.Year + "-" + DateTime.Now.Month.ToString("00"),titleFilename);
             if (!Directory.Exists(folder))
                 Directory.CreateDirectory(folder);
             var outputFile = Path.Combine(folder, filename);
@@ -446,7 +417,6 @@ namespace WeblogAddin
                 return true;
 
             return false;
-
         }
 
         /// <summary>
@@ -460,153 +430,20 @@ namespace WeblogAddin
         {
             markdown = markdown.Replace("</categories>",
                     "</categories>\r\n" +
-                    "<postid>" + ActivePost.PostID + "</postid>");
+                    "<postid>" + WeblogModel.ActivePost.PostId + "</postid>");
 
             return markdown;
         }
 
-        #endregion
-
-        #region Post Configuration and Meta Data
-        /// <summary>
-        /// Strips the Markdown Meta data from the message and populates
-        /// the post structure with the meta data values.
-        /// </summary>
-        /// <param name="markdown"></param>        
-        /// <returns></returns>
-        public WeblogPostMetadata GetPostConfigFromMarkdown(string markdown)
-        {
-            var meta = new WeblogPostMetadata()
-            {
-                RawMarkdownBody = markdown,
-                MarkdownBody = markdown,
-                WeblogName = WeblogAddinConfiguration.Current.LastWeblogAccessed
-            };
-            
-            // check for title in first line and remove it 
-            // since the body shouldn't render the title
-            var lines = StringUtils.GetLines(markdown);
-            if (lines.Length > 0 && lines[0].StartsWith("# "))
-            {
-                meta.MarkdownBody = meta.MarkdownBody.Replace(lines[0], "").Trim();
-                meta.Title = lines[0].Trim().Substring(2);
-            }
-            else if (lines.Length > 2 && lines[0] == "---" && meta.MarkdownBody.Contains("layout: post"))
-            {
-                var block = mmFileUtils.ExtractString(meta.MarkdownBody, "---", "---", returnDelimiters: true);
-                if (!string.IsNullOrEmpty(block))
-                {
-                    meta.Title = StringUtils.ExtractString(block, "title: ", "\n").Trim();
-                    meta.MarkdownBody = meta.MarkdownBody.Replace(block, "").Trim();
-                }
-            }
+#endregion
 
 
-            string config = StringUtils.ExtractString(markdown,
-                "<!-- Post Configuration -->",
-                "<!-- End Post Configuration -->",
-                caseSensitive: false, allowMissingEndDelimiter: true, returnDelimiters: true);
 
-            if (string.IsNullOrEmpty(config))
-                return meta;
-
-            // strip the config section
-            meta.MarkdownBody = meta.MarkdownBody.Replace(config, "");
-
-
-            string title = StringUtils.ExtractString(config, "\n<title>", "</title>").Trim();
-            if (string.IsNullOrEmpty(meta.Title))
-                meta.Title = title;
-            meta.Abstract = StringUtils.ExtractString(config, "\n<abstract>", "\n</abstract>").Trim();
-            meta.Keywords = StringUtils.ExtractString(config, "\n<keywords>", "\n</keywords>").Trim();
-            meta.Categories = StringUtils.ExtractString(config, "\n<categories>", "\n</categories>").Trim();
-            meta.PostId = StringUtils.ExtractString(config, "\n<postid>", "</postid>").Trim();
-            string strIsDraft = StringUtils.ExtractString(config, "\n<isDraft>", "</isDraft>").Trim();
-            if (strIsDraft != null && strIsDraft == "True")
-                meta.IsDraft = true;
-            string weblogName = StringUtils.ExtractString(config, "\n<weblog>", "</weblog>").Trim();
-            if (!string.IsNullOrEmpty(weblogName))
-                meta.WeblogName = weblogName;
-
-            string featuredImageUrl = StringUtils.ExtractString(config, "\n<featuredImage>", "</featuredImage>");
-            if (!string.IsNullOrEmpty(featuredImageUrl))
-                meta.FeaturedImageUrl = featuredImageUrl.Trim();
-
-            ActivePost.Title = meta.Title;            
-            ActivePost.Categories = meta.Categories.Split(new [] { ','},StringSplitOptions.RemoveEmptyEntries);
-
-            ActivePost.mt_excerpt = meta.Abstract;
-            ActivePost.mt_keywords = meta.Keywords;
-
-            return meta;
-        }
-
-        /// <summary>
-        /// This method sets the RawMarkdownBody
-        /// </summary>
-        /// <param name="meta"></param>
-        /// <returns>Updated Markdown - also sets the RawMarkdownBody and MarkdownBody</returns>
-        public string SetConfigInMarkdown(WeblogPostMetadata meta)
-        {
-            string markdown = meta.RawMarkdownBody;
-            string origConfig = StringUtils.ExtractString(markdown, "<!-- Post Configuration -->", "<!-- End Post Configuration -->", false, false, true);
-            string newConfig = $@"<!-- Post Configuration -->
-<!--
-```xml
-<blogpost>
-<title>{meta.Title}</title>
-<abstract>
-{meta.Abstract}
-</abstract>
-<categories>
-{meta.Categories}
-</categories>
-<keywords>
-{meta.Keywords}
-</keywords>
-<isDraft>{meta.IsDraft}</isDraft>
-<featuredImage>{meta.FeaturedImageUrl}</featuredImage>
-<weblogs>
-<postid>{meta.PostId}</postid>
-<weblog>
-{meta.WeblogName}
-</weblog>
-</weblogs>
-</blogpost>
-```
--->
-<!-- End Post Configuration -->";
-
-            if (string.IsNullOrEmpty(origConfig))
-            {
-                markdown += "\r\n" + newConfig;
-            }
-            else
-                markdown = markdown.Replace(origConfig, newConfig);
-
-            meta.RawMarkdownBody = markdown;
-            meta.MarkdownBody = meta.RawMarkdownBody.Replace(newConfig, "");
-
-            return markdown;
-        }
-
-        //public string SafeFilename(string fileName, string replace = "")
-        //{
-        //    string filename = Path.GetInvalidFileNameChars()
-        //        .Aggregate(fileName,
-        //            (current, c) => current.Replace(c.ToString(), replace));
-
-        //    filename = filename.Replace("#", "");
-        //    return filename;
-        //}
-
-        #endregion
-
-        #region Downloaded Post Handling
+#region Downloaded Post Handling
 
         public void CreateDownloadedPostOnDisk(Post post, string weblogName)
         {
-            string filename = mmFileUtils.SafeFilename(post.Title);
+            string filename = FileUtils.SafeFilename(post.Title);
 
             var folder = Path.Combine(WeblogAddinConfiguration.Current.PostsFolder,
                 "Downloaded",weblogName,
@@ -623,14 +460,14 @@ namespace WeblogAddin
 
             if (post.CustomFields != null)
             {
-                var cf = post.CustomFields.FirstOrDefault(custf => custf.ID == "mt_markdown");
+                var cf = post.CustomFields.FirstOrDefault(custf => custf.Id == "mt_markdown");
                 if (cf != null)
                 {
                     body = cf.Value;
                     isMarkdown = true;
                 }
 
-                cf = post.CustomFields.FirstOrDefault(custf => custf.ID == "wp_post_thumbnail");
+                cf = post.CustomFields.FirstOrDefault(custf => custf.Id == "wp_post_thumbnail");
                 if (cf != null)
                     featuredImage = cf.Value;
             }
@@ -657,17 +494,21 @@ namespace WeblogAddin
 
 
             // Create the new post by creating a file with title preset
-            string newPostMarkdown = NewWeblogPost(new WeblogPostMetadata()
+            var meta = new WeblogPostMetadata()
             {
                 Title = post.Title,
                 MarkdownBody = body,
                 Categories = categories,
                 Keywords = post.mt_keywords,
                 Abstract = post.mt_excerpt,
-                PostId = post.PostID.ToString(),
+                PostId = post.PostId.ToString(),
                 WeblogName = weblogName,
-                FeaturedImageUrl = featuredImage         
-            });
+                FeaturedImageUrl = featuredImage,
+                PostDate = post.DateCreated,
+                PostStatus = post.PostStatus
+            };
+            
+            string newPostMarkdown = NewWeblogPost(meta);
             File.WriteAllText(outputFile, newPostMarkdown);
             
             mmApp.Configuration.LastFolder = Path.GetDirectoryName(outputFile);
@@ -678,9 +519,9 @@ namespace WeblogAddin
                 string path = mmApp.Configuration.LastFolder;
 
                 // do this synchronously so images show up :-<
-                ShowStatus("Downloading post images...");
+                ShowStatus("Downloading post images...", mmApp.Configuration.StatusMessageTimeout);                   
                 SaveMarkdownImages(html, path);
-                ShowStatus("Post download complete.", 5000);
+                ShowStatus("Post download complete.", mmApp.Configuration.StatusMessageTimeout);
 
                 //new Action<string,string>(SaveImages).BeginInvoke(html,path,null, null);
             }
@@ -726,5 +567,123 @@ namespace WeblogAddin
         }
 
         #endregion
+
+
+        #region Main Menu Pad for WebLog
+
+        void AddMainMenuItems()
+        {
+
+            // create commands
+            Command_WeblogForm();
+
+
+            var mainMenuItem = new MenuItem
+            {
+                Header = "Web_log"
+            };
+            AddMenuItem(mainMenuItem, "MainMenuTools", mode: 0);
+
+            var mi = new MenuItem
+            {
+                Header = "_Post to Weblog",
+                Command = WeblogFormCommand,
+                CommandParameter = "posttoweblog",
+            };
+            mainMenuItem.Items.Add(mi);
+
+            mi = new MenuItem
+            {
+                Header = "_New Weblog Post",
+                Command = WeblogFormCommand,
+                CommandParameter = "newweblogpost"
+            };
+            mainMenuItem.Items.Add(mi);
+
+
+            mi = new MenuItem
+            {
+                Header = "_Download Weblog Posts",
+                Command = WeblogFormCommand,
+                CommandParameter = "downloadweblogpost"
+            };
+            mainMenuItem.Items.Add(mi);
+
+            mi = new MenuItem
+            {
+                Header = "_Open Weblog Posts Folder",
+                Command = WeblogFormCommand,
+                CommandParameter = "openweblogfolder"
+            };
+            mainMenuItem.Items.Add(mi);
+
+            mainMenuItem.Items.Add(new Separator());
+
+            mi = new MenuItem
+            {
+                Header = "_Configure Weblogs",
+                Command = WeblogFormCommand,
+                CommandParameter = "configureweblog"
+            };
+            mainMenuItem.Items.Add(mi);
+
+        }
+
+        public CommandBase WeblogFormCommand { get; set; }
+
+        void Command_WeblogForm()
+        {
+            WeblogFormCommand = new CommandBase((parameter, command) =>
+            {
+                var action = parameter as string;
+                if (string.IsNullOrEmpty(action))
+                    return;
+
+                if (action == "openweblogfolder")
+                {
+                    ShellUtils.OpenFileInExplorer(WeblogModel.Configuration.PostsFolder);
+                    return;
+                }
+
+                // actions that require form to be open
+                var form = new WeblogForm(WeblogModel)
+                {
+                    Owner = Model.Window
+                };
+                form.Model.AppModel = Model;
+                form.Show();
+
+                switch (action)
+                {
+                    case "posttoweblog":
+                        form.TabControl.SelectedIndex = 0;
+                        break;
+                    case "newweblogpost":
+                        form.TabControl.SelectedIndex = 1;
+                        break;
+                    case "downloadweblogpost":
+                        form.TabControl.SelectedIndex = 2;
+                        break;
+                    case "configureweblog":
+                        form.TabControl.SelectedIndex = 3;
+                        break;                                       
+                }
+            }, (p, c) =>
+            {
+                var action = p as string;
+                if (string.IsNullOrEmpty(action))
+                    return true;
+
+                if (action == "posttoweblog")
+                    return Model.ActiveEditor != null;
+
+                return true;
+            });
+        }
+
+        #endregion
     }
+
+
+
 }

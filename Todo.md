@@ -1,37 +1,74 @@
 ﻿# Markdown Monster ToDo List
 
+### Bugs
+* [x] When closing last document stats are not cleared.
+
 ### Immediate
-* Addin Enabled/Disabled
-* Check for start position to make sure it's visible
-* Spell checker Dictionary Downloads
+* [ ] Addin Enabled/Disabled
+* [ ] Master Configuration Form
+* [x] Git Integration
+    *  [x] Clone Repository
+    *  [x] Commit to Git Dialog (uid/pwd,desc,commit all)
+    *  [x] Add Remote
+    *  [x] Create Repository
+
+### Mid Term
+* [ ] Search for Blog Posts in Weblog Posts folder (walk tree and show titles)
+* [ ] Add JavaScript {{Handlebars}} Processing to Snippets Addin
+* [x] Image Previews and file preview in a **Preview Tab**
+* [ ] Support for projects (or folder specific settings)
+* [x] Spell checker Dictionary Downloads
     * Store dictionaries online
     * Show what's installed
     * Show whats available
     * Link to Open Office for missing stuff
-* ~~WebLog MetaWeblog Discovery with /rsd URL~~
-* ~~Addin Manager to check for MinVersion of Addin~~a
- 
-
-### Mid Term
-* Refactor Weblog Publishing libraries
-    * Need interfaces for Medium, New WordPress API
-* Add JavaScript {{Handlebars}} Processing to Snippets Addin
 
 ### Bugs
-
+* [x] Fix Folder Browser Rename/Delete file occasional locking issues.
+* [x] Fix Markdown List display where new bullet auto creates
 
 ### Consideration
-* Check out ReverseMarkdown C# source - needs adjustments (lists, spacing)
-* Support arbitrary MetaWeblog API attributes in MetaData
-* Drag and Drop Web Images into the editor (Not possible due to IE Security?)
-* Copy Image from Clipboard into editor and save to disk? (See above)
-* Git Commit/Push Addin
-* PngOut on Png Images captured with SnagIt or Inserted
-* Page Templates (add-in?)
-* Multiple configurations for blog posts (use post/blogid subitems?)
-* Research **R Markdown**, **AsciiDoc**
-* Export/Copy/Weblog Publish to Clipboard with Images embedded
+* [ ] Check out ReverseMarkdown C# source - needs adjustments (lists, spacing)
+* [ ] reveal.js presentations
+* [ ] Research **R Markdown**, **AsciiDoc**
+* [ ] Switch to using CEFSharp (Chromium) instead of IE WebBrowser Control 
+    * Turns out this is too slow for the editor at least
+    * Lots of overhead even with optimizations enabled (noticable typing lag)
+    * Reexamime - CefSharp is supposedly working on perf improvements
+    * Perhaps look into using the WindowsFormsHost to use the WinForms version
+      which doesn't use bitmap proxy rendering.
+    * Very different and more limited Interop between WPF and Javascript
+    * Adds significantly to size of package (~40megs)
+        
+### Markus's List of issues
 
-### Notes
+#### Enhancements
+    
+
+* [ ] Commit/push all changes in the folder to Git
+* [ ] FileSystemWatcher to update the tree automatically
+* [ ] Undocking tabs? :smiley:
+* [x] Allow me to search in the tree
+* [x] Ctrl-Tab to switch documents
+* [x] Can't the save-as dialog stay open on the same folder rather than always defaulting back to something
+* [x] ~~Could you somehow support Grammarly?~~
+
+#### Bugs 
+
+* [x] Drag & Drop of images does not work when one creates a new file and that file hasn't been saved yet
+* [x] When adding a new file to the tree, it should show the right icon when setting the file extension
+* [x] Can I somehow see what the current zoom level is?
+* [x] When right-clicking to delete in the tree, it should delete the item I clicked on, even if a different one is selected (right now, you can accidently delete a different one if an item in the tree is selected, and then you right-click on a DIFFERENT one and pick "Delete")
+* [x] Table editing in TextBox Input Masks topic (and it also has trouble with the escaped | character when escaped with a backslash)
+* [ ] It's not particularly happy on very large topics (such as the "Understanding Layout" one I have)
 
 
+* [x] Creating new files with ctrl-N is still kind of a pain and the behavior is quite unpredictable
+* [x] CTRL-S saving often seems to be slow. (Does a Git Push include a save automatically?)
+
+### Table Editor
+* [ ] Alignment in tables would be nice
+* [ ] Would be nice to be able to re-sort tables somehow based on a certain column
+* [x] Would be nice to paste entire tables somehow from HTML or Word
+* [x] It takes quite a while to open the editor for a larger table
+* [x] And then trying to add another column to that table is even slower

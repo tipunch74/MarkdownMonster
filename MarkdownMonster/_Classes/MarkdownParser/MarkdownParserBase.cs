@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Westwind.Utilities;
 
@@ -18,69 +19,30 @@ namespace MarkdownMonster
         /// </summary>
         /// <param name="markdown"></param>
         /// <returns></returns>
-        public abstract string Parse(string markdown, bool renderLinksExternal = false);
+        public abstract string Parse(string markdown);
         
- 
-
 
         /// <summary>
-        /// Parses strikeout text ~~text~~. Single line (to linebreak) allowed only.
+        /// Strips 
         /// </summary>
-        /// <param name="html"></param>
+        /// <param name="markdown"></param>
         /// <returns></returns>
-        protected string ParseStrikeout(string html)
+        public string StripFrontMatter(string markdown)
         {
-            if (html == null)
-                return null;
+            string extractedYaml = null;
+            var match = MarkdownUtilities.YamlExtractionRegex.Match(markdown);
+            if (match.Success)
+                extractedYaml = match.Value;
 
-            var matches = strikeOutRegex.Matches(html);
-            foreach (Match match in matches)
-            {
-                string val = match.Value;
+            if (!string.IsNullOrEmpty(extractedYaml))
+                markdown = markdown.Replace(extractedYaml, "");
 
-                if (match.Value.Contains('\n'))
-                    continue;
+            return markdown;
+        }        
 
-                val = "<del>" + val.Substring(2, val.Length - 4) + "</del>";
-                html = html.Replace(match.Value, val);
-            }
 
-            return html;
-        }
-
-        /// <summary>
-        /// Strips Front Matter headers at the beginning of the document
-        /// </summary>
-        /// <param name="html"></param>
-        /// <returns></returns>
-        protected string StripFrontMatter(string html)
-        {
-            string fm = null;
-
-            if (html.StartsWith("---\n") || html.StartsWith("---\r"))
-                fm = mmFileUtils.ExtractString(html, "---", "---", returnDelimiters: true);
-
-            if (fm == null || !fm.Contains("title: "))
-                return html;
-            
-            return html.Replace(fm,"").TrimStart();
-        }
         
-        /// <summary>
-        /// Parses out script tags that might not be encoded yet
-        /// </summary>
-        /// <param name="html"></param>
-        /// <returns></returns>
-        protected string ParseScript(string html)
-        {
-            html = html.Replace("<script", "&lt;script");
-            html = html.Replace("</script", "&lt;/script");
-            html = html.Replace("javascript:", "javaScript:");
-            return html;
-        }
-
-
-        public static Regex fontAwesomeIconRegEx = new Regex(@"@icon-.*?[\s|\.|\,|\<]");
+        protected static Regex fontAwesomeIconRegEx = new Regex(@"@icon-.*?[\s|\.|\,|\<]");
 
         /// <summary>
         /// Post processing routine that post-processes the HTML and 
@@ -100,6 +62,68 @@ namespace MarkdownMonster
 
             return html;
         }
+
+
+        private static Regex includeFileRegEx = new Regex(@"\[\!include.*?\[.*?\]\(.*?\)\]",RegexOptions.IgnoreCase);
+
+        /// <summary>
+        /// Parses DocFx include files in the format of:
+        ///
+        ///    [!include[title](relativePathToFileToInclude>)]
+        ///
+        /// Should run **prior** to Markdown parsing of the main document
+        /// as it will embed the file content as is.
+        /// </summary>
+        /// <param name="html"></param>
+        /// <returns></returns>
+        protected string ParseDocFxIncludeFiles(string html)
+        {
+            var matches = includeFileRegEx.Matches(html);
+            foreach (Match match in matches)
+            {
+                string value = match.Value;
+
+                //string title = StringUtils.ExtractString(value, "[!include[", "]");
+                string file = StringUtils.ExtractString(value, "](", ")]");
+                if (string.IsNullOrEmpty(file))
+                    continue;
+
+                if (file.StartsWith("~"))                                    
+                    file = mmApp.Model.Window.FolderBrowser.FolderPath + file.Substring(1);
+                
+
+                string filePath;
+                if (file.Contains(@":\"))
+                {
+                    filePath = file;
+                }
+                else
+                {
+                    filePath = mmApp.Model.ActiveDocument?.Filename;
+                    if (string.IsNullOrEmpty(filePath))
+                        continue;
+
+                    filePath = Path.GetDirectoryName(filePath);
+                    if (filePath == null)
+                        continue;
+                }
+
+
+                string includeFile = Path.Combine(filePath, file);
+                includeFile = FileUtils.NormalizePath(includeFile);
+                if (!File.Exists(includeFile))
+                    continue;
+
+                var markdownDocument = new MarkdownDocument();
+                markdownDocument.Load(includeFile);
+                string includeContent = markdownDocument.RenderHtml();
+
+                html = html.Replace(value, includeContent);
+            }
+
+            return html;
+        }
+
 
         /// <summary>
         /// Replaces all links with target="top" links

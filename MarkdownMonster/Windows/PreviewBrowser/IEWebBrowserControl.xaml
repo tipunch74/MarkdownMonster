@@ -1,0 +1,36 @@
+﻿<UserControl x:Class="MarkdownMonster.Windows.PreviewBrowser.IEWebBrowserControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:MarkdownMonster.Windows.PreviewBrowser"
+             mc:Ignorable="d" 
+             d:DesignHeight="300" d:DesignWidth="300">
+    <Grid>
+        <WebBrowser Name="WebBrowser"  x:FieldModifier="public"
+                    VerticalAlignment="Stretch"  SizeChanged="PreviewBrowserWebBrowserControl_SizeChanged"                        
+                    Visibility="{Binding IsTabOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+
+            <WebBrowser.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="View in Web _Browser" Command="{Binding Commands.ViewInExternalBrowserCommand}"
+                              InputGestureText="{Binding  Commands.ViewInExternalBrowserCommand.KeyboardShortcut}"/>
+                    <MenuItem Header="Refresh Browser" InputGestureText="F5" Command="{Binding Commands.RefreshPreviewCommand}" />
+                    <MenuItem Header="View Html _Source" Command="{Binding Commands.ViewHtmlSourceCommand}" />
+                    <Separator />
+                    <MenuItem Header="Save As _Html..." Command="{Binding Commands.SaveAsHtmlCommand}" />
+                    <MenuItem Header="Save As _Pdf..." Command="{Binding Commands.GeneratePdfCommand}" />
+                    <MenuItem Header="P_rint..."  InputGestureText="Ctrl-P" Command="{Binding Commands.PrintPreviewCommand}" />
+                    <Separator />
+                    <MenuItem Header="Edit Preview _Theme" Command="{Binding Commands.EditPreviewThemeCommand}"/>
+                    <MenuItem  Header="Configure Preview Syncing" Command="{Binding Commands.PreviewSyncModeCommand}" />
+                    <Separator/>
+                    <MenuItem Header="Toggle Preview Window" 
+                              Command="{Binding Commands.TogglePreviewBrowserCommand}"  IsCheckable="True"
+                              InputGestureText="{Binding  Commands.TogglePreviewBrowserCommand.KeyboardShortcut}"
+                              IsChecked="{Binding IsPreviewBrowserVisible}" />
+                </ContextMenu>
+            </WebBrowser.ContextMenu>
+        </WebBrowser>
+    </Grid>
+</UserControl>

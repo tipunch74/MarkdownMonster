@@ -62,8 +62,11 @@ namespace MarkdownMonster.Windows
             }
         }
 
+        public bool IsLinkReference { get; set;  }
+
         public string MarkdownFile { get; set; }
 
+        public AppModel AppModel { get; set; } = mmApp.Model;
 
         public PasteHref()
         {
@@ -77,6 +80,7 @@ namespace MarkdownMonster.Windows
             Activated += PasteHref_Activated;
 
             IsExternal = mmApp.Configuration.LastLinkExternal;
+            IsLinkReference = mmApp.Configuration.UseReferenceLinks;
 
         }
 
@@ -138,7 +142,7 @@ namespace MarkdownMonster.Windows
             var fd = new OpenFileDialog
             {
                 DefaultExt = ".html",
-                Filter = "Linkable Files (*.htm,*.html,*.md,*.pdf;*.zip)|*.html;*.htm;*.md;*.pdf;*.zip|All Files (*.*)|*.*",
+                Filter = "Linkable Files (*.html,*.htm,*.md,*.pdf;*.zip)|*.html;*.htm;*.md;*.pdf;*.zip|All Files (*.*)|*.*",
                 CheckFileExists = true,
                 RestoreDirectory = true,
                 Multiselect = false,
@@ -173,15 +177,40 @@ namespace MarkdownMonster.Windows
                 
                 // not relative
                 if (!relPath.StartsWith("..\\"))
-                    Link = relPath;
+                    Link = relPath.Replace("\\","/");
 
                 // is it a physical path?
                 if (Link.Contains(":\\"))
                     Link = "file:///" + Link;
 
             }
+
+            Link = StringUtils.UrlEncode(Link);
+
             mmApp.Configuration.LastFolder = System.IO.Path.GetDirectoryName(fd.FileName);
             TextLink.Focus();
+        }
+
+        /// <summary>
+        /// External link and Link Reference are mutually exclusive
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void Checkbox_Handler(object sender, RoutedEventArgs e)
+        {
+            if (sender == CheckExternalLink)
+            {
+                if (CheckExternalLink.IsChecked.Value)
+                    CheckLinkReference.IsChecked = false;
+            }
+            if (sender == CheckLinkReference)
+            {
+                if (CheckLinkReference.IsChecked.Value)
+                {
+                    CheckExternalLink.IsChecked = false;
+                }
+            }
+
         }
     }
 }

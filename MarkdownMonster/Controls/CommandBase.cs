@@ -1,26 +1,36 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using MarkdownMonster.Annotations;
 
 namespace MarkdownMonster
 {
     /// <summary>
     /// Base Command class to allow handling of commands generically
     /// </summary>
-    public class CommandBase : ICommand
+    public class CommandBase : ICommand, INotifyPropertyChanged
     {
-
-        Action<object, ICommand> _execute;
-        private Func<object, ICommand,bool> _canExecute;
-        private Func<object, ICommand, bool> _previewExecute;
+        private readonly Action<object, ICommand> _execute;
+        private readonly Func<object, ICommand, bool> _canExecute;
+        private readonly Func<object, ICommand, bool> _previewExecute;
 
         public string Caption { get; set; }
 
-        public string ToolTip { get; set; }   
+        private string _keyboardShortcut;
 
+        public string KeyboardShortcut
+        {
+            get => _keyboardShortcut;
+            set
+            {
+                if (value == _keyboardShortcut) return;
+                _keyboardShortcut = value;        
+                OnPropertyChanged(nameof(KeyboardShortcut));
+            }
+        }
+
+        public string ToolTip { get; set; }
 
         /// <summary>
         /// Constructor that allows you to hook up each of the command events
@@ -33,38 +43,48 @@ namespace MarkdownMonster
             _execute = execute;
             _canExecute = canExecute;
             _previewExecute = previewExecute;
-
         }
 
         public bool CanExecute(object parameter)
         {
-            if (_canExecute != null)
-                return  _canExecute.Invoke(parameter, this);
-
-            return true;
+            return _canExecute == null || _canExecute.Invoke(parameter, this);
         }
-
 
         public bool PreviewExecute(object parameter)
         {
-            if (_previewExecute != null)
-                return _previewExecute.Invoke(parameter,this);
-
-            return true;
+            return _previewExecute == null || _previewExecute.Invoke(parameter, this);
         }
 
         public void Execute(object parameter)
         {
-            if (PreviewExecute(parameter))
+            if (PreviewExecute(parameter) && CanExecute(parameter))
                 _execute?.Invoke(parameter, this);
-        }    
-        
-
-        public void InvalidateCanExecute()
-        {
-            CanExecuteChanged?.Invoke(this, new EventArgs());
         }
 
-        public event EventHandler CanExecuteChanged;
+
+        /// <summary>
+        /// Event hook that ensures that CanExecute gets called as needed
+        /// </summary>
+        public event EventHandler CanExecuteChanged
+        {
+            add
+            {
+                if (_canExecute != null)
+                    CommandManager.RequerySuggested += value;
+            }
+            remove
+            {
+                if (_canExecute != null)
+                CommandManager.RequerySuggested -= value;
+            }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        [NotifyPropertyChangedInvocator]
+        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 }
